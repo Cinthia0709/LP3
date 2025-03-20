@@ -1,0 +1,16 @@
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+
+public class BufferedReaderExample {
+    public static void main(String[] args) {
+        // Crear el objeto BufferedReader para leer la entrada del usuario
+        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+
+        try {
+            // Solicitar al usuario que ingrese sus datos
+            System.out.print("Ingresa tu nombre: ");
+            String nombre = reader.readLine();  // Lee una línea completa
+
+            System.out.print("Ingresa tu edad: ");
+            int edad = Integer.parseInt(reader.readLine());
