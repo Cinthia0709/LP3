@@ -1,0 +1,43 @@
+#include <iostream>
+#include <cstdlib>  
+#include <ctime>    
+using namespace std;
+
+
+const int n=50;
+const int m=50;
+
+
+void rellenarMatriz(int arr[][m], int n, int m) {
+    srand(time(0)); 
+
+    for(int i = 0; i < n; i++) {
+        for(int j = 0; j < m; j++) {
+            arr[i][j] = rand() % 100; 
+        }
+    }
+}a
+
+
+int sumarmatriz(int arr[n][m], int n, int m){
+	int sum;
+		for(int i=0;i<n;i++){
+			for(int j=0;j<m;j++){
+				sum=sum+arr[i][j];
+			}
+		}
+	return sum;
+}
+
+
+int main(){
+	
+	int arr[n][m];
+	
+	rellenarMatriz(arr,n,m);
+	int result=sumarmatriz(arr,n,m);
+	
+	cout<<result<<endl;
+	
+return 0;
+}
