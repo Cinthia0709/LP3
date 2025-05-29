@@ -2,25 +2,21 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QRandomGenerator>
+#include <QElapsedTimer>
+#include <QInputDialog>
 
-/**
- * @brief Constructor de MainWindow. Inicializa la interfaz y configura los caballos.
- */
+bool carreraEnCurso = false;
+
+
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), caballo1(new QLabel("Caballo 1 🐎")),
-    caballo2(new QLabel("Caballo 2 🐎")), caballo3(new QLabel("Caballo 3 🐎")),
-    caballo4(new QLabel("Caballo 4 🐎")), timer(new QTimer(this)) {
+    : QMainWindow(parent), timer(new QTimer(this)) {
 
     QWidget *centralWidget = new QWidget(this);
-    QVBoxLayout *layout = new QVBoxLayout(centralWidget);
+    layout = new QVBoxLayout(centralWidget);
 
-    layout->addWidget(caballo1);
-    layout->addWidget(caballo2);
-    layout->addWidget(caballo3);
-    layout->addWidget(caballo4);
-
-    QPushButton *btnIniciar = new QPushButton("Iniciar Carrera");
+    btnIniciar = new QPushButton("Iniciar Carrera");
     layout->addWidget(btnIniciar);
+
 
     setCentralWidget(centralWidget);
 
@@ -28,29 +24,84 @@ MainWindow::MainWindow(QWidget *parent)
     connect(timer, &QTimer::timeout, this, &MainWindow::actualizarCarrera);
 }
 
-/**
- * @brief Destructor de MainWindow.
- */
-MainWindow::~MainWindow() {}
+MainWindow::~MainWindow() {
+    for (auto t : std::as_const(tiempos)) delete t;
+}
+
+void MainWindow::extracted() {
+    for (QLabel *label : std::as_const(caballos)) {
+        layout->removeWidget(label);
+        delete label;
+    }
+}
+void MainWindow::crearCaballos(int cantidad) {
+    // Eliminar caballos anteriores
+    extracted();
+    caballos.clear();
+    tiempos.clear();
+    llegados.clear();
+
+    // Crear nuevos caballos
+    for (int i = 0; i < cantidad; ++i) {
+        QLabel *caballo = new QLabel(QString("Caballo %1 🐎").arg(i + 1));
+        layout->insertWidget(i, caballo);
+        caballos.push_back(caballo);
+
+        QElapsedTimer *timer = new QElapsedTimer();
+        tiempos.push_back(timer);
+        llegados.push_back(false);
+    }
+}
 
 void MainWindow::iniciarCarrera() {
-    // Reinicia la carrera
-    caballo1->move(10, caballo1->y());
-    caballo2->move(10, caballo2->y());
-    caballo3->move(10, caballo3->y());
-    caballo4->move(10, caballo4->y());
+    if (carreraEnCurso) return;
+
+    cantidadCaballos = QInputDialog::getInt(this, "Cantidad de Caballos", "¿Cuántos caballos participarán?", 5, 1, 20);
+
+    crearCaballos(cantidadCaballos);
+
+    for (int i = 0; i < cantidadCaballos; ++i) {
+        caballos[i]->move(10, caballos[i]->y());
+        tiempos[i]->restart();
+        caballos[i]->setStyleSheet("");
+        llegados[i] = false;
+    }
+
+    carreraEnCurso = true;
+    btnIniciar->setEnabled(false);
     timer->start(100);
 }
 
-void MainWindow::actualizarCarrera() {
-    // Movimiento aleatorio de cada caballo
-    caballo1->move(caballo1->x() + QRandomGenerator::global()->bounded(5), caballo1->y());
-    caballo2->move(caballo2->x() + QRandomGenerator::global()->bounded(5), caballo2->y());
-    caballo3->move(caballo3->x() + QRandomGenerator::global()->bounded(5), caballo3->y());
-    caballo4->move(caballo4->x() + QRandomGenerator::global()->bounded(5), caballo4->y());
 
-    // Verifica si alguno llegó al final
-    if (caballo1->x() > 400 || caballo2->x() > 400 || caballo3->x() > 400 || caballo4->x() > 400) {
+void MainWindow::actualizarCarrera() {
+    bool todosLlegaron = true;
+
+    for (int i = 0; i < cantidadCaballos; ++i) {
+        if (!llegados[i]) {
+            int avance = QRandomGenerator::global()->bounded(11);
+            int nuevaX = caballos[i]->x() + avance;
+
+            if (nuevaX >= meta) {
+                caballos[i]->move(meta, caballos[i]->y());
+                llegados[i] = true;
+
+                qint64 ms = tiempos[i]->elapsed();
+                double seg = ms / 1000.0;
+                caballos[i]->setText(QString("Caballo %1 🐎 - Llegó en %2 segundos").arg(i + 1).arg(seg, 0, 'f', 2));
+                caballos[i]->setStyleSheet("color: green; font-weight: bold;");
+            } else {
+                caballos[i]->move(nuevaX, caballos[i]->y());
+                todosLlegaron = false;
+            }
+
+
+        }
+    }
+
+    if (todosLlegaron) {
         timer->stop();
+        carreraEnCurso = false;
+        btnIniciar->setEnabled(true);
     }
 }
+
