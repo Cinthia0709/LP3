@@ -10,17 +10,26 @@
 #include <QMouseEvent>
 #include <QMessageBox>
 #include <limits>
+#include <queue>
+#include <stack>
+#include <functional>
+#include <QTimer>
+#include <QInputDialog>
+#include <algorithm>
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent) {
+    : QMainWindow(parent), timerAnimacion(new QTimer(this)), indiceAnimacion(0) {
     configurarUI();
     conectarBaseDeDatos();
     cargarNodosDesdeBD();
+
+    connect(timerAnimacion, &QTimer::timeout, this, &MainWindow::avanzarAnimacion);
 }
 
 MainWindow::~MainWindow() {
     if (db.isOpen())
         db.close();
+    delete timerAnimacion;
 }
 
 void MainWindow::configurarUI() {
@@ -33,6 +42,7 @@ void MainWindow::configurarUI() {
     btnModificar = new QPushButton("Modificar Ruta");
     btnEliminar = new QPushButton("Eliminar Ruta");
     btnRutaMinima = new QPushButton("Ruta Mínima");
+    btnRecorrido = new QPushButton("Recorrido BFS/DFS");
 
     // Configuración del área gráfica
     graphicsView = new QGraphicsView(this);
@@ -46,27 +56,24 @@ void MainWindow::configurarUI() {
     // Conexiones de botones
     connect(btnCrear, &QPushButton::clicked, this, [this]() {
         modoActual = CrearRuta;
-        primerNodoSeleccionado = nullptr;
-        segundoNodoSeleccionado = nullptr;
+        resetSeleccionModificacion();
         qDebug() << "Modo: Crear Ruta activado.";
     });
 
     connect(btnModificar, &QPushButton::clicked, this, [this]() {
         modoActual = ModificarRuta;
-        nodoOrigenMod = nullptr;
-        nodoDestinoActual = nullptr;
-        nodoNuevoDestino = nullptr;
+        resetSeleccionModificacion();
         qDebug() << "Modo: Modificar Ruta activado.";
     });
 
     connect(btnEliminar, &QPushButton::clicked, this, [this]() {
         modoActual = EliminarRuta;
-        nodoEliminar1 = nullptr;
-        nodoEliminar2 = nullptr;
+        resetSeleccionModificacion();
         qDebug() << "Modo: Eliminar Ruta activado.";
     });
 
     connect(btnRutaMinima, &QPushButton::clicked, this, &MainWindow::mostrarDialogoRutaMinima);
+    connect(btnRecorrido, &QPushButton::clicked, this, &MainWindow::mostrarDialogoRecorrido);
 
     // Diseño de la interfaz
     QHBoxLayout *botonLayout = new QHBoxLayout;
@@ -74,6 +81,7 @@ void MainWindow::configurarUI() {
     botonLayout->addWidget(btnModificar);
     botonLayout->addWidget(btnEliminar);
     botonLayout->addWidget(btnRutaMinima);
+    botonLayout->addWidget(btnRecorrido);
 
     QVBoxLayout *mainLayout = new QVBoxLayout;
     mainLayout->addLayout(botonLayout);
@@ -305,7 +313,6 @@ void MainWindow::resetSeleccionModificacion() {
     modoActual = Ninguno;
 }
 
-// Implementación de Dijkstra para ruta mínima
 std::vector<std::vector<std::pair<int, int>>> MainWindow::construirGrafo() {
     std::vector<std::vector<std::pair<int, int>>> grafo;
     if (!db.isOpen()) return grafo;
@@ -456,4 +463,200 @@ void MainWindow::mostrarDialogoRutaMinima() {
         auto [ruta, distancia] = calcularRutaMinima(origen, destino);
         mostrarRutaMinima(ruta, distancia);
     }
+}
+
+void MainWindow::mostrarDialogoRecorrido() {
+    QDialog dialog(this);
+    dialog.setWindowTitle("Configurar Recorrido");
+    dialog.setFixedSize(400, 200);
+
+    QFormLayout form(&dialog);
+
+    QComboBox *comboNodoInicial = new QComboBox(&dialog);
+    QSqlQuery queryNodos("SELECT id, nombre FROM nodos ORDER BY nombre");
+    while (queryNodos.next()) {
+        comboNodoInicial->addItem(queryNodos.value("nombre").toString(), queryNodos.value("id"));
+    }
+
+    QComboBox *comboAlgoritmo = new QComboBox(&dialog);
+    comboAlgoritmo->addItem("BFS (Recorrido por amplitud)");
+    comboAlgoritmo->addItem("DFS (Recorrido por profundidad)");
+
+    QComboBox *comboVisualizacion = new QComboBox(&dialog);
+    comboVisualizacion->addItem("Mostrar distancia");
+    comboVisualizacion->addItem("Mostrar tiempo estimado");
+
+    form.addRow("Nodo inicial:", comboNodoInicial);
+    form.addRow("Algoritmo:", comboAlgoritmo);
+    form.addRow("Visualización:", comboVisualizacion);
+
+    QDialogButtonBox buttonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, Qt::Horizontal, &dialog);
+    form.addRow(&buttonBox);
+
+    connect(&buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(&buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        int nodoInicial = comboNodoInicial->currentData().toInt();
+        QString algoritmo = comboAlgoritmo->currentText();
+        QString visualizacion = comboVisualizacion->currentText();
+
+        limpiarVisualizacion();
+
+        if (algoritmo == "BFS (Recorrido por amplitud)") {
+            ejecutarBFS(nodoInicial);
+        } else {
+            ejecutarDFS(nodoInicial);
+        }
+
+        visualizarRecorrido(recorridoActual, visualizacion);
+    }
+}
+
+void MainWindow::ejecutarBFS(int nodoInicial) {
+    recorridoActual.clear();
+    if (!mapaNodos.contains(nodoInicial)) return;
+
+    std::queue<int> cola;
+    QSet<int> visitados;
+
+    cola.push(nodoInicial);
+    visitados.insert(nodoInicial);
+
+    while (!cola.empty()) {
+        int actual = cola.front();
+        cola.pop();
+        recorridoActual.push_back(actual);
+
+        QSqlQuery query;
+        query.prepare("SELECT destino_id FROM rutas WHERE origen_id = :id");
+        query.bindValue(":id", actual);
+
+        if (query.exec()) {
+            while (query.next()) {
+                int vecino = query.value("destino_id").toInt();
+                if (!visitados.contains(vecino)) {
+                    visitados.insert(vecino);
+                    cola.push(vecino);
+                }
+            }
+        }
+    }
+}
+
+void MainWindow::ejecutarDFS(int nodoInicial) {
+    recorridoActual.clear();
+    if (!mapaNodos.contains(nodoInicial)) return;
+
+    QSet<int> visitados;
+    std::stack<int> pila;
+
+    pila.push(nodoInicial);
+    visitados.insert(nodoInicial);
+
+    while (!pila.empty()) {
+        int actual = pila.top();
+        pila.pop();
+        recorridoActual.push_back(actual);
+
+        QSqlQuery query;
+        query.prepare("SELECT destino_id FROM rutas WHERE origen_id = :id ORDER BY destino_id DESC");
+        query.bindValue(":id", actual);
+
+        if (query.exec()) {
+            while (query.next()) {
+                int vecino = query.value("destino_id").toInt();
+                if (!visitados.contains(vecino)) {
+                    visitados.insert(vecino);
+                    pila.push(vecino);
+                }
+            }
+        }
+    }
+}
+
+void MainWindow::visualizarRecorrido(const std::vector<int>& recorrido, const QString& tipo) {
+    if (recorrido.empty()) return;
+
+    scene->clear();
+    cargarNodosDesdeBD();
+    cargarRutasDesdeBD();
+
+    visualizacionActual = tipo;
+
+    QColor colorNodo(144, 238, 144); // Verde claro
+    QColor colorLinea(255, 0, 255);  // Magenta
+
+    for (int nodoId : recorrido) {
+        if (mapaNodos.contains(nodoId)) {
+            for (QGraphicsItem* item : mapaNodos[nodoId]->childItems()) {
+                if (auto elipse = dynamic_cast<QGraphicsEllipseItem*>(item)) {
+                    elipse->setBrush(colorNodo);
+                }
+            }
+        }
+    }
+
+    indiceAnimacion = 0;
+    recorridoActual = recorrido;
+    visualizacionActual = tipo;
+
+    QGraphicsTextItem* textoInfo = scene->addText(
+        QString("Recorrido %1\n%2 nodos visitados")
+            .arg(tipo)
+            .arg(recorridoActual.size())
+        );
+    textoInfo->setPos(20, 20);
+    textoInfo->setDefaultTextColor(Qt::darkBlue);
+    textoInfo->setZValue(3);
+    itemsAnimacion.append(textoInfo);
+
+    timerAnimacion->start(1000);
+}
+
+void MainWindow::avanzarAnimacion() {
+    if (indiceAnimacion >= static_cast<int>(recorridoActual.size()) - 1) {
+        timerAnimacion->stop();
+        return;
+    }
+
+    int actual = recorridoActual[indiceAnimacion];
+    int siguiente = recorridoActual[indiceAnimacion + 1];
+
+    if (mapaNodos.contains(actual) && mapaNodos.contains(siguiente)) {
+        QPointF p1 = mapaNodos[actual]->sceneBoundingRect().center();
+        QPointF p2 = mapaNodos[siguiente]->sceneBoundingRect().center();
+
+        QPen penAnimacion(QColor(255, 0, 255), 3);
+        QGraphicsLineItem* linea = scene->addLine(QLineF(p1, p2), penAnimacion);
+        linea->setZValue(1);
+        itemsAnimacion.append(linea);
+
+        double distancia = QLineF(p1, p2).length();
+        double tiempo = distancia / 50.0;
+
+        QString info = (visualizacionActual == "Mostrar distancia")
+                           ? QString("Dist: %1 u").arg(distancia, 0, 'f', 1)
+                           : QString("Tiempo: %1 min").arg(tiempo, 0, 'f', 1);
+
+        QPointF midPoint = (p1 + p2) / 2;  // Definir midPoint aquí
+        QGraphicsTextItem* texto = scene->addText(info);
+        texto->setPos(midPoint.x() - 30, midPoint.y() - 20);
+        texto->setDefaultTextColor(Qt::blue);
+        texto->setZValue(2);
+        itemsAnimacion.append(texto);
+    }
+
+    indiceAnimacion++;
+}
+
+void MainWindow::limpiarVisualizacion() {
+    timerAnimacion->stop();
+    for (QGraphicsItem* item : itemsAnimacion) {
+        scene->removeItem(item);
+        delete item;
+    }
+    itemsAnimacion.clear();
+    recorridoActual.clear();
+    indiceAnimacion = 0;
 }

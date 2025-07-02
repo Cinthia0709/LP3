@@ -72,6 +72,23 @@ private:
     std::pair<std::vector<int>, int> calcularRutaMinima(int origen, int destino);
     void mostrarRutaMinima(const std::vector<int>& ruta, int distancia);
     void mostrarDialogoRutaMinima();
+
+    // Para BFS/DFS
+    QPushButton *btnRecorrido;  // Declaración faltante
+    QString visualizacionActual; // Variable para almacenar el tipo de visualización
+    void mostrarDialogoRecorrido();
+    void ejecutarBFS(int nodoInicial);
+    void ejecutarDFS(int nodoInicial);
+    void visualizarRecorrido(const std::vector<int>& recorrido, const QString& tipo);
+    void limpiarVisualizacion();
+    void avanzarAnimacion();    // Declaración faltante
+
+    // Variables para animación
+    QTimer* timerAnimacion;
+    int indiceAnimacion;
+    std::vector<int> recorridoActual;
+    QList<QGraphicsItem*> itemsAnimacion;
+
 };
 
 #endif // MAINWINDOW_H
