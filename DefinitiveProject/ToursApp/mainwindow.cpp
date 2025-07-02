@@ -16,7 +16,9 @@
 #include <QTimer>
 #include <QInputDialog>
 #include <algorithm>
-
+#include <QSpinBox>
+#include <QTableWidget>
+#include <QHeaderView>
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), timerAnimacion(new QTimer(this)), indiceAnimacion(0) {
     configurarUI();
@@ -35,16 +37,20 @@ MainWindow::~MainWindow() {
 void MainWindow::configurarUI() {
     centralWidget = new QWidget(this);
     setCentralWidget(centralWidget);
-    setWindowTitle("Sistema de Rutas Turísticas");
+    setWindowTitle("Sistema de Rutas TurÃ­sticas");
 
-    // Configuración de botones
+    // ConfiguraciÃ³n de botones
+    btnCrearNodo = new QPushButton("Agregar Nodo");
+    btnLeerNodos = new QPushButton("Ver Nodos");
+    btnActualizarNodo = new QPushButton("Actualizar Nodo");
+    btnEliminarNodoDB = new QPushButton("Eliminar Nodo");
     btnCrear = new QPushButton("Crear Ruta");
     btnModificar = new QPushButton("Modificar Ruta");
     btnEliminar = new QPushButton("Eliminar Ruta");
-    btnRutaMinima = new QPushButton("Ruta Mínima");
+    btnRutaMinima = new QPushButton("Ruta MÃ­nima");
     btnRecorrido = new QPushButton("Recorrido BFS/DFS");
 
-    // Configuración del área gráfica
+    // ConfiguraciÃ³n del Ã¡rea grÃ¡fica
     graphicsView = new QGraphicsView(this);
     graphicsView->setFixedSize(800, 600);
     graphicsView->setStyleSheet("border: 1px solid #ccc;");
@@ -74,9 +80,18 @@ void MainWindow::configurarUI() {
 
     connect(btnRutaMinima, &QPushButton::clicked, this, &MainWindow::mostrarDialogoRutaMinima);
     connect(btnRecorrido, &QPushButton::clicked, this, &MainWindow::mostrarDialogoRecorrido);
+    connect(btnCrearNodo, &QPushButton::clicked, this, &MainWindow::mostrarDialogoCrearNodo);
+    connect(btnLeerNodos, &QPushButton::clicked, this, &MainWindow::mostrarDialogoLeerNodos);
+    connect(btnActualizarNodo, &QPushButton::clicked, this, &MainWindow::mostrarDialogoActualizarNodo);
+    connect(btnEliminarNodoDB, &QPushButton::clicked, this, &MainWindow::mostrarDialogoEliminarNodo);
 
-    // Diseño de la interfaz
+
+    // DiseÃ±o de la interfaz
     QHBoxLayout *botonLayout = new QHBoxLayout;
+    botonLayout->addWidget(btnCrearNodo);
+    botonLayout->addWidget(btnLeerNodos);
+    botonLayout->addWidget(btnActualizarNodo);
+    botonLayout->addWidget(btnEliminarNodoDB);
     botonLayout->addWidget(btnCrear);
     botonLayout->addWidget(btnModificar);
     botonLayout->addWidget(btnEliminar);
@@ -115,20 +130,28 @@ void MainWindow::cargarNodosDesdeBD() {
         int x = query.value("x").toInt();
         int y = query.value("y").toInt();
 
-        // Crear elemento visual del nodo
+        // Crear elipse y texto
         QGraphicsEllipseItem *elipse = new QGraphicsEllipseItem(0, 0, 30, 30);
         elipse->setBrush(Qt::blue);
         elipse->setPen(QPen(Qt::black));
+        elipse->setZValue(1);  // Asegura que esté sobre las líneas
 
         QGraphicsTextItem *texto = new QGraphicsTextItem(nombre);
         texto->setDefaultTextColor(Qt::white);
         texto->setPos(5, 5);
 
+        // Crear grupo
         QGraphicsItemGroup *nodo = new QGraphicsItemGroup();
         nodo->addToGroup(elipse);
         nodo->addToGroup(texto);
         nodo->setPos(x, y);
+        nodo->setZValue(10);  // Muy al frente
 
+        // Habilitar interacción
+        nodo->setFlag(QGraphicsItem::ItemIsSelectable, true);
+        nodo->setFlag(QGraphicsItem::ItemIsFocusable, true);
+
+        // Guardar en estructuras
         mapaNodos[id] = nodo;
         nodoPorItem[nodo] = id;
         scene->addItem(nodo);
@@ -173,6 +196,8 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
         }
 
         if (!grupo || !nodoPorItem.contains(grupo)) return false;
+
+        qDebug() << "Grupo clickeado con ID:" << nodoPorItem[grupo];  // DEBUG
 
         switch (modoActual) {
         case CrearRuta:
@@ -219,12 +244,18 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
 }
 
 void MainWindow::crearRuta() {
-    if (!primerNodoSeleccionado || !segundoNodoSeleccionado) return;
+    qDebug() << "crearRuta() ejecutándose";
+
+    if (!primerNodoSeleccionado || !segundoNodoSeleccionado) {
+        qDebug() << "Faltan nodos para crear la ruta";
+        return;
+    }
 
     int origenId = nodoPorItem[primerNodoSeleccionado];
     int destinoId = nodoPorItem[segundoNodoSeleccionado];
+    qDebug() << "Intentando crear ruta de" << origenId << "a" << destinoId;
 
-    // Verificar si la ruta ya existe
+    // Verificar si ya existe
     QSqlQuery checkQuery;
     checkQuery.prepare("SELECT COUNT(*) FROM rutas WHERE "
                        "(origen_id = :origen AND destino_id = :destino) OR "
@@ -232,13 +263,18 @@ void MainWindow::crearRuta() {
     checkQuery.bindValue(":origen", origenId);
     checkQuery.bindValue(":destino", destinoId);
 
-    if (!checkQuery.exec() || !checkQuery.next() || checkQuery.value(0).toInt() > 0) {
+    if (!checkQuery.exec()) {
+        qDebug() << "Error al verificar existencia de ruta:" << checkQuery.lastError().text();
+        return;
+    }
+
+    if (checkQuery.next() && checkQuery.value(0).toInt() > 0) {
         QMessageBox::warning(this, "Advertencia", "La ruta ya existe");
         resetSeleccionModificacion();
         return;
     }
 
-    // Crear la ruta en la base de datos
+    // Insertar ruta
     QSqlQuery insertQuery;
     insertQuery.prepare("INSERT INTO rutas (origen_id, destino_id) VALUES (:origen, :destino)");
     insertQuery.bindValue(":origen", origenId);
@@ -246,13 +282,16 @@ void MainWindow::crearRuta() {
 
     if (!insertQuery.exec()) {
         QMessageBox::critical(this, "Error", "No se pudo crear la ruta: " + insertQuery.lastError().text());
+        qDebug() << "Error al insertar:" << insertQuery.lastError().text();
+        return;
     }
 
-    // Actualizar vista
+    qDebug() << "Ruta insertada exitosamente";
+
+    // Actualizar
     resetSeleccionModificacion();
     cargarNodosDesdeBD();
 }
-
 void MainWindow::modificarRuta() {
     if (!nodoOrigenMod || !nodoDestinoActual || !nodoNuevoDestino) return;
 
@@ -317,7 +356,7 @@ std::vector<std::vector<std::pair<int, int>>> MainWindow::construirGrafo() {
     std::vector<std::vector<std::pair<int, int>>> grafo;
     if (!db.isOpen()) return grafo;
 
-    // Obtener el número máximo de nodos
+    // Obtener el nÃºmero mÃ¡ximo de nodos
     QSqlQuery maxQuery("SELECT MAX(id) FROM nodos");
     int maxId = maxQuery.next() ? maxQuery.value(0).toInt() : 0;
     grafo.resize(maxId + 1);
@@ -391,7 +430,7 @@ void MainWindow::mostrarRutaMinima(const std::vector<int>& ruta, int distancia) 
     cargarRutasDesdeBD();
 
     if (ruta.empty()) {
-        QMessageBox::information(this, "Ruta Mínima", "No existe camino entre los nodos seleccionados");
+        QMessageBox::information(this, "Ruta MÃ­nima", "No existe camino entre los nodos seleccionados");
         return;
     }
 
@@ -435,7 +474,7 @@ void MainWindow::mostrarRutaMinima(const std::vector<int>& ruta, int distancia) 
 
 void MainWindow::mostrarDialogoRutaMinima() {
     QDialog dialog(this);
-    dialog.setWindowTitle("Calcular Ruta Mínima");
+    dialog.setWindowTitle("Calcular Ruta MÃ­nima");
 
     QFormLayout form(&dialog);
     QComboBox *comboOrigen = new QComboBox(&dialog);
@@ -488,7 +527,7 @@ void MainWindow::mostrarDialogoRecorrido() {
 
     form.addRow("Nodo inicial:", comboNodoInicial);
     form.addRow("Algoritmo:", comboAlgoritmo);
-    form.addRow("Visualización:", comboVisualizacion);
+    form.addRow("VisualizaciÃ³n:", comboVisualizacion);
 
     QDialogButtonBox buttonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, Qt::Horizontal, &dialog);
     form.addRow(&buttonBox);
@@ -510,6 +549,191 @@ void MainWindow::mostrarDialogoRecorrido() {
         }
 
         visualizarRecorrido(recorridoActual, visualizacion);
+    }
+}
+
+void MainWindow::mostrarDialogoCrearNodo() {
+    QDialog dialog(this);
+    dialog.setWindowTitle("Agregar Nodo Turístico");
+
+    QFormLayout form(&dialog);
+    QLineEdit *editNombre = new QLineEdit(&dialog);
+    QSpinBox *spinX = new QSpinBox(&dialog);
+    QSpinBox *spinY = new QSpinBox(&dialog);
+    spinX->setRange(0, 1000);
+    spinY->setRange(0, 1000);
+
+    form.addRow("Nombre del lugar:", editNombre);
+    form.addRow("Posición X:", spinX);
+    form.addRow("Posición Y:", spinY);
+
+    QDialogButtonBox buttonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, Qt::Horizontal, &dialog);
+    form.addRow(&buttonBox);
+
+    connect(&buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(&buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        QString nombre = editNombre->text().trimmed();
+        int x = spinX->value();
+        int y = spinY->value();
+
+        if (nombre.isEmpty()) {
+            QMessageBox::warning(this, "Advertencia", "El nombre no puede estar vacío.");
+            return;
+        }
+
+        QSqlQuery insertQuery;
+        insertQuery.prepare("INSERT INTO nodos (nombre, x, y) VALUES (:nombre, :x, :y)");
+        insertQuery.bindValue(":nombre", nombre);
+        insertQuery.bindValue(":x", x);
+        insertQuery.bindValue(":y", y);
+
+        if (!insertQuery.exec()) {
+            QMessageBox::critical(this, "Error", "No se pudo agregar el nodo: " + insertQuery.lastError().text());
+            return;
+        }
+
+        cargarNodosDesdeBD();
+    }
+}
+
+void MainWindow::mostrarDialogoLeerNodos() {
+    QDialog dialog(this);
+    dialog.setWindowTitle("Lista de Nodos");
+
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    QTableWidget *table = new QTableWidget(&dialog);
+
+    QSqlQuery query("SELECT id, nombre, x, y FROM nodos ORDER BY id");
+    int row = 0;
+    table->setColumnCount(4);
+    table->setHorizontalHeaderLabels({"ID", "Nombre", "X", "Y"});
+
+    while (query.next()) {
+        table->insertRow(row);
+        table->setItem(row, 0, new QTableWidgetItem(query.value("id").toString()));
+        table->setItem(row, 1, new QTableWidgetItem(query.value("nombre").toString()));
+        table->setItem(row, 2, new QTableWidgetItem(query.value("x").toString()));
+        table->setItem(row, 3, new QTableWidgetItem(query.value("y").toString()));
+        row++;
+    }
+
+    table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    layout->addWidget(table);
+
+    QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok);
+    layout->addWidget(buttonBox);
+    connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+
+    dialog.exec();
+}
+
+void MainWindow::mostrarDialogoActualizarNodo() {
+    QDialog dialog(this);
+    dialog.setWindowTitle("Actualizar Nodo");
+
+    QFormLayout form(&dialog);
+    QComboBox *comboNodos = new QComboBox(&dialog);
+
+    QSqlQuery query("SELECT id, nombre FROM nodos ORDER BY nombre");
+    while (query.next()) {
+        comboNodos->addItem(query.value("nombre").toString(), query.value("id"));
+    }
+
+    QLineEdit *editNombre = new QLineEdit(&dialog);
+    QSpinBox *spinX = new QSpinBox(&dialog);
+    QSpinBox *spinY = new QSpinBox(&dialog);
+    spinX->setRange(0, 1000);
+    spinY->setRange(0, 1000);
+
+    form.addRow("Nodo a actualizar:", comboNodos);
+    form.addRow("Nuevo nombre:", editNombre);
+    form.addRow("Nueva posición X:", spinX);
+    form.addRow("Nueva posición Y:", spinY);
+
+    QDialogButtonBox buttonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                               Qt::Horizontal, &dialog);
+    form.addRow(&buttonBox);
+
+    connect(&buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(&buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        int id = comboNodos->currentData().toInt();
+        QString nuevoNombre = editNombre->text().trimmed();
+        int x = spinX->value();
+        int y = spinY->value();
+
+        if (nuevoNombre.isEmpty()) {
+            QMessageBox::warning(this, "Advertencia", "El nombre no puede estar vacío.");
+            return;
+        }
+
+        QSqlQuery updateQuery;
+        updateQuery.prepare("UPDATE nodos SET nombre = :nombre, x = :x, y = :y WHERE id = :id");
+        updateQuery.bindValue(":nombre", nuevoNombre);
+        updateQuery.bindValue(":x", x);
+        updateQuery.bindValue(":y", y);
+        updateQuery.bindValue(":id", id);
+
+        if (!updateQuery.exec()) {
+            QMessageBox::critical(this, "Error", "No se pudo actualizar el nodo: " + updateQuery.lastError().text());
+            return;
+        }
+
+        cargarNodosDesdeBD();
+    }
+}
+
+void MainWindow::mostrarDialogoEliminarNodo() {
+    QDialog dialog(this);
+    dialog.setWindowTitle("Eliminar Nodo");
+
+    QFormLayout form(&dialog);
+    QComboBox *comboNodos = new QComboBox(&dialog);
+
+    QSqlQuery query("SELECT id, nombre FROM nodos ORDER BY nombre");
+    while (query.next()) {
+        comboNodos->addItem(query.value("nombre").toString(), query.value("id"));
+    }
+
+    form.addRow("Nodo a eliminar:", comboNodos);
+
+    QDialogButtonBox buttonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                               Qt::Horizontal, &dialog);
+    form.addRow(&buttonBox);
+
+    connect(&buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(&buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        int id = comboNodos->currentData().toInt();
+        QString nombre = comboNodos->currentText();
+
+        QMessageBox::StandardButton confirm = QMessageBox::question(
+            this, "Confirmar Eliminación",
+            QString("¿Estás seguro de que deseas eliminar el nodo '%1'? Se eliminarán también sus rutas.").arg(nombre),
+            QMessageBox::Yes | QMessageBox::No
+            );
+
+        if (confirm == QMessageBox::Yes) {
+            QSqlQuery deleteRutas;
+            deleteRutas.prepare("DELETE FROM rutas WHERE origen_id = :id OR destino_id = :id");
+            deleteRutas.bindValue(":id", id);
+            deleteRutas.exec(); // Se eliminan rutas primero
+
+            QSqlQuery deleteNodo;
+            deleteNodo.prepare("DELETE FROM nodos WHERE id = :id");
+            deleteNodo.bindValue(":id", id);
+
+            if (!deleteNodo.exec()) {
+                QMessageBox::critical(this, "Error", "No se pudo eliminar el nodo: " + deleteNodo.lastError().text());
+                return;
+            }
+
+            cargarNodosDesdeBD();
+        }
     }
 }
 
@@ -639,7 +863,7 @@ void MainWindow::avanzarAnimacion() {
                            ? QString("Dist: %1 u").arg(distancia, 0, 'f', 1)
                            : QString("Tiempo: %1 min").arg(tiempo, 0, 'f', 1);
 
-        QPointF midPoint = (p1 + p2) / 2;  // Definir midPoint aquí
+        QPointF midPoint = (p1 + p2) / 2;  // Definir midPoint aquÃ­
         QGraphicsTextItem* texto = scene->addText(info);
         texto->setPos(midPoint.x() - 30, midPoint.y() - 20);
         texto->setDefaultTextColor(Qt::blue);

@@ -31,6 +31,10 @@ protected:
 private:
     // Elementos de la UI
     QWidget *centralWidget;
+    QPushButton *btnCrearNodo;
+    QPushButton *btnLeerNodos;
+    QPushButton *btnActualizarNodo;
+    QPushButton *btnEliminarNodoDB;
     QPushButton *btnCrear;
     QPushButton *btnModificar;
     QPushButton *btnEliminar;
@@ -43,7 +47,7 @@ private:
     QMap<int, QGraphicsItemGroup*> mapaNodos;
     QMap<QGraphicsItemGroup*, int> nodoPorItem;
 
-    // Variables de estado para selección
+    // Variables de estado para selecciÃ³n
     QGraphicsItemGroup* primerNodoSeleccionado = nullptr;
     QGraphicsItemGroup* segundoNodoSeleccionado = nullptr;
     QGraphicsItemGroup* nodoOrigenMod = nullptr;
@@ -55,7 +59,11 @@ private:
     enum ModoSeleccion { Ninguno, CrearRuta, ModificarRuta, EliminarRuta };
     ModoSeleccion modoActual = Ninguno;
 
-    // Funciones de configuración
+    // Funciones de configuraciÃ³n
+    void mostrarDialogoCrearNodo();
+    void mostrarDialogoLeerNodos();
+    void mostrarDialogoActualizarNodo();
+    void mostrarDialogoEliminarNodo();
     void configurarUI();
     void conectarBaseDeDatos();
     void cargarNodosDesdeBD();
@@ -67,23 +75,23 @@ private:
     void modificarRuta();
     void resetSeleccionModificacion();
 
-    // Funciones para el algoritmo de ruta mínima
+    // Funciones para el algoritmo de ruta mÃ­nima
     std::vector<std::vector<std::pair<int, int>>> construirGrafo();
     std::pair<std::vector<int>, int> calcularRutaMinima(int origen, int destino);
     void mostrarRutaMinima(const std::vector<int>& ruta, int distancia);
     void mostrarDialogoRutaMinima();
 
     // Para BFS/DFS
-    QPushButton *btnRecorrido;  // Declaración faltante
-    QString visualizacionActual; // Variable para almacenar el tipo de visualización
+    QPushButton *btnRecorrido;  // DeclaraciÃ³n faltante
+    QString visualizacionActual; // Variable para almacenar el tipo de visualizaciÃ³n
     void mostrarDialogoRecorrido();
     void ejecutarBFS(int nodoInicial);
     void ejecutarDFS(int nodoInicial);
     void visualizarRecorrido(const std::vector<int>& recorrido, const QString& tipo);
     void limpiarVisualizacion();
-    void avanzarAnimacion();    // Declaración faltante
+    void avanzarAnimacion();    // DeclaraciÃ³n faltante
 
-    // Variables para animación
+    // Variables para animaciÃ³n
     QTimer* timerAnimacion;
     int indiceAnimacion;
     std::vector<int> recorridoActual;
