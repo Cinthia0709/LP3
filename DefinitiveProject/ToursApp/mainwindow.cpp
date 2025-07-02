@@ -7,8 +7,9 @@
 #include <QGraphicsTextItem>
 #include <QGraphicsLineItem>
 #include <QDebug>
-#include <qcoreevent.h>
 #include <QMouseEvent>
+#include <QMessageBox>
+#include <limits>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent) {
@@ -25,33 +26,24 @@ MainWindow::~MainWindow() {
 void MainWindow::configurarUI() {
     centralWidget = new QWidget(this);
     setCentralWidget(centralWidget);
-    setWindowTitle("RUTAS");
+    setWindowTitle("Sistema de Rutas Turísticas");
 
-    btnCrear = new QPushButton("CREAR");
-    btnModificar = new QPushButton("MODIFICAR");
-    btnEliminar = new QPushButton("ELIMINAR");
+    // Configuración de botones
+    btnCrear = new QPushButton("Crear Ruta");
+    btnModificar = new QPushButton("Modificar Ruta");
+    btnEliminar = new QPushButton("Eliminar Ruta");
+    btnRutaMinima = new QPushButton("Ruta Mínima");
 
+    // Configuración del área gráfica
     graphicsView = new QGraphicsView(this);
     graphicsView->setFixedSize(800, 600);
-    graphicsView->setStyleSheet("border: 2px solid red;");
+    graphicsView->setStyleSheet("border: 1px solid #ccc;");
     scene = new QGraphicsScene(this);
     graphicsView->setScene(scene);
     graphicsView->setMouseTracking(true);
     graphicsView->viewport()->installEventFilter(this);
-    connect(btnCrear, &QPushButton::clicked, this, &MainWindow::crearRuta);
-    connect(btnModificar, &QPushButton::clicked, this, [this]() {
-        modoActual = ModificarRuta;
-        nodoOrigenMod = nullptr;
-        nodoDestinoActual = nullptr;
-        nodoNuevoDestino = nullptr;
-        qDebug() << "Modo: Modificar Ruta activado.";
-    });
-    connect(btnEliminar, &QPushButton::clicked, this, [this]() {
-        modoActual = EliminarRuta;
-        nodoEliminar1 = nullptr;
-        nodoEliminar2 = nullptr;
-        qDebug() << "Modo: Eliminar Ruta activado.";
-    });
+
+    // Conexiones de botones
     connect(btnCrear, &QPushButton::clicked, this, [this]() {
         modoActual = CrearRuta;
         primerNodoSeleccionado = nullptr;
@@ -59,10 +51,29 @@ void MainWindow::configurarUI() {
         qDebug() << "Modo: Crear Ruta activado.";
     });
 
+    connect(btnModificar, &QPushButton::clicked, this, [this]() {
+        modoActual = ModificarRuta;
+        nodoOrigenMod = nullptr;
+        nodoDestinoActual = nullptr;
+        nodoNuevoDestino = nullptr;
+        qDebug() << "Modo: Modificar Ruta activado.";
+    });
+
+    connect(btnEliminar, &QPushButton::clicked, this, [this]() {
+        modoActual = EliminarRuta;
+        nodoEliminar1 = nullptr;
+        nodoEliminar2 = nullptr;
+        qDebug() << "Modo: Eliminar Ruta activado.";
+    });
+
+    connect(btnRutaMinima, &QPushButton::clicked, this, &MainWindow::mostrarDialogoRutaMinima);
+
+    // Diseño de la interfaz
     QHBoxLayout *botonLayout = new QHBoxLayout;
     botonLayout->addWidget(btnCrear);
     botonLayout->addWidget(btnModificar);
     botonLayout->addWidget(btnEliminar);
+    botonLayout->addWidget(btnRutaMinima);
 
     QVBoxLayout *mainLayout = new QVBoxLayout;
     mainLayout->addLayout(botonLayout);
@@ -73,27 +84,22 @@ void MainWindow::configurarUI() {
 
 void MainWindow::conectarBaseDeDatos() {
     db = QSqlDatabase::addDatabase("QSQLITE");
-    db.setDatabaseName("C:\\Users\\eicek\\Documents\\ToursApp\\Toursapp.sqlite");
+    db.setDatabaseName("C:\\Users\\USER\\LP3\\DefinitiveProject\\ToursApp\\Toursapp.sqlite");
 
     if (!db.open()) {
-        qDebug() << "Error al abrir la base de datos:" << db.lastError().text();
+        QMessageBox::critical(this, "Error", "No se pudo abrir la base de datos: " + db.lastError().text());
     } else {
-        qDebug() << "Base de datos abierta correctamente.";
-    }
-    if (!db.open()) {
-        qDebug() << "Error al conectar con SQLite:" << db.lastError().text();
-    } else {
-        qDebug() << "Conectado a Toursapp.sqlite";
+        qDebug() << "Base de datos conectada correctamente";
     }
 }
 
 void MainWindow::cargarNodosDesdeBD() {
-
     if (!db.isOpen()) return;
 
     QSqlQuery query("SELECT id, nombre, x, y FROM nodos");
     scene->clear();
     mapaNodos.clear();
+    nodoPorItem.clear();
 
     while (query.next()) {
         int id = query.value("id").toInt();
@@ -101,42 +107,33 @@ void MainWindow::cargarNodosDesdeBD() {
         int x = query.value("x").toInt();
         int y = query.value("y").toInt();
 
-
-        QGraphicsEllipseItem *elipse = new QGraphicsEllipseItem(0, 0, 400, 400);
-        elipse->setBrush(Qt::cyan);
+        // Crear elemento visual del nodo
+        QGraphicsEllipseItem *elipse = new QGraphicsEllipseItem(0, 0, 30, 30);
+        elipse->setBrush(Qt::blue);
         elipse->setPen(QPen(Qt::black));
 
         QGraphicsTextItem *texto = new QGraphicsTextItem(nombre);
-        texto->setDefaultTextColor(Qt::black);
-        QFont font = texto->font();
-        font.setPointSize(100);
-        texto->setFont(font);
-
-        QRectF bounds = texto->boundingRect();
-        texto->setPos((400 - bounds.width()) / 2, (400 - bounds.height()) / 2);
+        texto->setDefaultTextColor(Qt::white);
+        texto->setPos(5, 5);
 
         QGraphicsItemGroup *nodo = new QGraphicsItemGroup();
         nodo->addToGroup(elipse);
         nodo->addToGroup(texto);
         nodo->setPos(x, y);
+
         mapaNodos[id] = nodo;
         nodoPorItem[nodo] = id;
-
-
         scene->addItem(nodo);
-        scene->setSceneRect(scene->itemsBoundingRect());
-        graphicsView->fitInView(scene->sceneRect(), Qt::KeepAspectRatio);
-        mapaNodos[id] = nodo;
     }
-    cargarRutasDesdeBD();
 
+    cargarRutasDesdeBD();
 }
 
 void MainWindow::cargarRutasDesdeBD() {
-
     if (!db.isOpen()) return;
 
     QSqlQuery query("SELECT origen_id, destino_id FROM rutas");
+    QPen penNormal(Qt::darkGray, 2);
 
     while (query.next()) {
         int origenId = query.value("origen_id").toInt();
@@ -146,68 +143,10 @@ void MainWindow::cargarRutasDesdeBD() {
             QPointF p1 = mapaNodos[origenId]->sceneBoundingRect().center();
             QPointF p2 = mapaNodos[destinoId]->sceneBoundingRect().center();
 
-            QGraphicsLineItem *linea = scene->addLine(QLineF(p1, p2), QPen(Qt::green, 2));
+            QGraphicsLineItem *linea = scene->addLine(QLineF(p1, p2), penNormal);
             linea->setZValue(-1);
         }
     }
-}
-
-void MainWindow::crearRuta() {
-    if (!primerNodoSeleccionado || !segundoNodoSeleccionado) {
-        qDebug() << "Selecciona dos nodos antes de crear la ruta.";
-        return;
-    }
-
-    int origenId = nodoPorItem[primerNodoSeleccionado];
-    int destinoId = nodoPorItem[segundoNodoSeleccionado];
-
-    QSqlQuery checkQuery;
-    checkQuery.prepare(R"(
-        SELECT COUNT(*) FROM rutas
-        WHERE (origen_id = :o AND destino_id = :d)
-           OR (origen_id = :d AND destino_id = :o)
-    )");
-    checkQuery.bindValue(":o", origenId);
-    checkQuery.bindValue(":d", destinoId);
-
-    if (!checkQuery.exec()) {
-        qDebug() << "Error al verificar existencia de ruta:" << checkQuery.lastError().text();
-        return;
-    }
-
-    if (checkQuery.next() && checkQuery.value(0).toInt() > 0) {
-        qDebug() << "La ruta entre" << origenId << "y" << destinoId << "ya existe.";
-        primerNodoSeleccionado->setOpacity(1.0);
-        segundoNodoSeleccionado->setOpacity(1.0);
-        primerNodoSeleccionado = nullptr;
-        segundoNodoSeleccionado = nullptr;
-        return;
-    }
-
-    QPointF p1 = primerNodoSeleccionado->pos() + QPointF(200, 200);
-    QPointF p2 = segundoNodoSeleccionado->pos() + QPointF(200, 200);
-
-
-    QGraphicsLineItem *linea = new QGraphicsLineItem(QLineF(p1, p2));
-    linea->setPen(QPen(Qt::blue, 3));
-    scene->addItem(linea);
-
-    QSqlQuery insertQuery;
-    insertQuery.prepare("INSERT INTO rutas (origen_id, destino_id) VALUES (:o, :d)");
-    insertQuery.bindValue(":o", origenId);
-    insertQuery.bindValue(":d", destinoId);
-
-    if (!insertQuery.exec()) {
-        qDebug() << "Error al guardar ruta:" << insertQuery.lastError().text();
-    } else {
-        qDebug() << "Ruta creada entre" << origenId << "y" << destinoId;
-    }
-
-    primerNodoSeleccionado->setOpacity(1.0);
-    segundoNodoSeleccionado->setOpacity(1.0);
-    primerNodoSeleccionado = nullptr;
-    segundoNodoSeleccionado = nullptr;
-    modoActual = Ninguno;
 }
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
@@ -227,145 +166,294 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
 
         if (!grupo || !nodoPorItem.contains(grupo)) return false;
 
-        // ====================== MODO CREAR RUTA ======================
-        if (modoActual == CrearRuta) {
+        switch (modoActual) {
+        case CrearRuta:
             if (!primerNodoSeleccionado) {
                 primerNodoSeleccionado = grupo;
-                grupo->setOpacity(0.5);
-                qDebug() << "Primer nodo seleccionado para crear.";
+                grupo->setOpacity(0.7);
             } else if (!segundoNodoSeleccionado && grupo != primerNodoSeleccionado) {
                 segundoNodoSeleccionado = grupo;
-                grupo->setOpacity(0.5);
-                qDebug() << "Segundo nodo seleccionado para crear.";
+                grupo->setOpacity(0.7);
                 crearRuta();
             }
             return true;
-        }
 
-        // ====================== MODO MODIFICAR RUTA ======================
-        if (modoActual == ModificarRuta) {
+        case ModificarRuta:
             if (!nodoOrigenMod) {
                 nodoOrigenMod = grupo;
-                grupo->setOpacity(0.5);
-                qDebug() << "Nodo origen seleccionado para modificar.";
+                grupo->setOpacity(0.7);
             } else if (!nodoDestinoActual && grupo != nodoOrigenMod) {
                 nodoDestinoActual = grupo;
-                grupo->setOpacity(0.5);
-                qDebug() << "Nodo destino actual seleccionado para modificar.";
+                grupo->setOpacity(0.7);
             } else if (!nodoNuevoDestino && grupo != nodoOrigenMod && grupo != nodoDestinoActual) {
                 nodoNuevoDestino = grupo;
-                grupo->setOpacity(0.5);
-                qDebug() << "Nuevo destino seleccionado.";
+                grupo->setOpacity(0.7);
                 modificarRuta();
             }
             return true;
-        }
 
-        // ====================== MODO ELIMINAR RUTA ======================
-        if (modoActual == EliminarRuta) {
+        case EliminarRuta:
             if (!nodoEliminar1) {
                 nodoEliminar1 = grupo;
-                grupo->setOpacity(0.5);
-                qDebug() << "Primer nodo seleccionado para eliminar.";
+                grupo->setOpacity(0.7);
             } else if (!nodoEliminar2 && grupo != nodoEliminar1) {
                 nodoEliminar2 = grupo;
-                grupo->setOpacity(0.5);
-                qDebug() << "Segundo nodo seleccionado para eliminar.";
+                grupo->setOpacity(0.7);
                 eliminarRuta();
             }
             return true;
+
+        default:
+            return false;
         }
-
     }
-
     return QMainWindow::eventFilter(obj, event);
 }
 
+void MainWindow::crearRuta() {
+    if (!primerNodoSeleccionado || !segundoNodoSeleccionado) return;
 
+    int origenId = nodoPorItem[primerNodoSeleccionado];
+    int destinoId = nodoPorItem[segundoNodoSeleccionado];
 
-void MainWindow::modificarRuta() {
-    int origenId = nodoPorItem[nodoOrigenMod];
-    int destinoActualId = nodoPorItem[nodoDestinoActual];
-    int nuevoDestinoId = nodoPorItem[nodoNuevoDestino];
-
-
+    // Verificar si la ruta ya existe
     QSqlQuery checkQuery;
-    checkQuery.prepare(R"(
-        SELECT id FROM rutas
-        WHERE (origen_id = :o AND destino_id = :d)
-           OR (origen_id = :d AND destino_id = :o)
-    )");
-    checkQuery.bindValue(":o", origenId);
-    checkQuery.bindValue(":d", destinoActualId);
+    checkQuery.prepare("SELECT COUNT(*) FROM rutas WHERE "
+                       "(origen_id = :origen AND destino_id = :destino) OR "
+                       "(origen_id = :destino AND destino_id = :origen)");
+    checkQuery.bindValue(":origen", origenId);
+    checkQuery.bindValue(":destino", destinoId);
 
-    if (!checkQuery.exec() || !checkQuery.next()) {
-        qDebug() << "La ruta original no existe.";
+    if (!checkQuery.exec() || !checkQuery.next() || checkQuery.value(0).toInt() > 0) {
+        QMessageBox::warning(this, "Advertencia", "La ruta ya existe");
         resetSeleccionModificacion();
         return;
     }
 
-    int rutaId = checkQuery.value(0).toInt();
+    // Crear la ruta en la base de datos
+    QSqlQuery insertQuery;
+    insertQuery.prepare("INSERT INTO rutas (origen_id, destino_id) VALUES (:origen, :destino)");
+    insertQuery.bindValue(":origen", origenId);
+    insertQuery.bindValue(":destino", destinoId);
 
-    QSqlQuery updateQuery;
-    updateQuery.prepare("UPDATE rutas SET destino_id = :nuevo WHERE id = :id");
-    updateQuery.bindValue(":nuevo", nuevoDestinoId);
-    updateQuery.bindValue(":id", rutaId);
-
-    if (!updateQuery.exec()) {
-        qDebug() << "Error al modificar ruta:" << updateQuery.lastError().text();
-    } else {
-        qDebug() << "Ruta modificada en BD.";
+    if (!insertQuery.exec()) {
+        QMessageBox::critical(this, "Error", "No se pudo crear la ruta: " + insertQuery.lastError().text());
     }
 
-
-    scene->clear();
-    cargarNodosDesdeBD();
-    cargarRutasDesdeBD();
-
+    // Actualizar vista
     resetSeleccionModificacion();
+    cargarNodosDesdeBD();
 }
 
-void MainWindow::resetSeleccionModificacion() {
-    if (nodoOrigenMod) nodoOrigenMod->setOpacity(1.0);
-    if (nodoDestinoActual) nodoDestinoActual->setOpacity(1.0);
-    if (nodoNuevoDestino) nodoNuevoDestino->setOpacity(1.0);
+void MainWindow::modificarRuta() {
+    if (!nodoOrigenMod || !nodoDestinoActual || !nodoNuevoDestino) return;
 
-    nodoOrigenMod = nullptr;
-    nodoDestinoActual = nullptr;
-    nodoNuevoDestino = nullptr;
-    modoActual = Ninguno;
+    int origenId = nodoPorItem[nodoOrigenMod];
+    int destinoActualId = nodoPorItem[nodoDestinoActual];
+    int nuevoDestinoId = nodoPorItem[nodoNuevoDestino];
+
+    // Verificar y actualizar la ruta
+    QSqlQuery updateQuery;
+    updateQuery.prepare("UPDATE rutas SET destino_id = :nuevo WHERE "
+                        "(origen_id = :origen AND destino_id = :destino) OR "
+                        "(origen_id = :destino AND destino_id = :origen)");
+    updateQuery.bindValue(":nuevo", nuevoDestinoId);
+    updateQuery.bindValue(":origen", origenId);
+    updateQuery.bindValue(":destino", destinoActualId);
+
+    if (!updateQuery.exec()) {
+        QMessageBox::critical(this, "Error", "No se pudo modificar la ruta");
+    }
+
+    resetSeleccionModificacion();
+    cargarNodosDesdeBD();
 }
 
 void MainWindow::eliminarRuta() {
+    if (!nodoEliminar1 || !nodoEliminar2) return;
+
     int id1 = nodoPorItem[nodoEliminar1];
     int id2 = nodoPorItem[nodoEliminar2];
 
-    // Verificar si existe
-    QSqlQuery query;
-    query.prepare(R"(
-        DELETE FROM rutas
-        WHERE (origen_id = :a AND destino_id = :b)
-           OR (origen_id = :b AND destino_id = :a)
-    )");
-    query.bindValue(":a", id1);
-    query.bindValue(":b", id2);
+    QSqlQuery deleteQuery;
+    deleteQuery.prepare("DELETE FROM rutas WHERE "
+                        "(origen_id = :id1 AND destino_id = :id2) OR "
+                        "(origen_id = :id2 AND destino_id = :id1)");
+    deleteQuery.bindValue(":id1", id1);
+    deleteQuery.bindValue(":id2", id2);
 
-    if (!query.exec()) {
-        qDebug() << "Error al eliminar ruta:" << query.lastError().text();
-    } else if (query.numRowsAffected() == 0) {
-        qDebug() << "No se encontró la ruta para eliminar.";
-    } else {
-        qDebug() << "Ruta eliminada correctamente.";
+    if (!deleteQuery.exec()) {
+        QMessageBox::critical(this, "Error", "No se pudo eliminar la ruta");
     }
 
+    resetSeleccionModificacion();
+    cargarNodosDesdeBD();
+}
 
-    nodoEliminar1->setOpacity(1.0);
-    nodoEliminar2->setOpacity(1.0);
-    nodoEliminar1 = nullptr;
-    nodoEliminar2 = nullptr;
+void MainWindow::resetSeleccionModificacion() {
+    if (primerNodoSeleccionado) primerNodoSeleccionado->setOpacity(1.0);
+    if (segundoNodoSeleccionado) segundoNodoSeleccionado->setOpacity(1.0);
+    if (nodoOrigenMod) nodoOrigenMod->setOpacity(1.0);
+    if (nodoDestinoActual) nodoDestinoActual->setOpacity(1.0);
+    if (nodoNuevoDestino) nodoNuevoDestino->setOpacity(1.0);
+    if (nodoEliminar1) nodoEliminar1->setOpacity(1.0);
+    if (nodoEliminar2) nodoEliminar2->setOpacity(1.0);
+
+    primerNodoSeleccionado = segundoNodoSeleccionado = nullptr;
+    nodoOrigenMod = nodoDestinoActual = nodoNuevoDestino = nullptr;
+    nodoEliminar1 = nodoEliminar2 = nullptr;
     modoActual = Ninguno;
+}
 
+// Implementación de Dijkstra para ruta mínima
+std::vector<std::vector<std::pair<int, int>>> MainWindow::construirGrafo() {
+    std::vector<std::vector<std::pair<int, int>>> grafo;
+    if (!db.isOpen()) return grafo;
+
+    // Obtener el número máximo de nodos
+    QSqlQuery maxQuery("SELECT MAX(id) FROM nodos");
+    int maxId = maxQuery.next() ? maxQuery.value(0).toInt() : 0;
+    grafo.resize(maxId + 1);
+
+    // Construir el grafo con las conexiones existentes
+    QSqlQuery query("SELECT origen_id, destino_id FROM rutas");
+    while (query.next()) {
+        int origen = query.value("origen_id").toInt();
+        int destino = query.value("destino_id").toInt();
+
+        if (mapaNodos.contains(origen) && mapaNodos.contains(destino)) {
+            QPointF p1 = mapaNodos[origen]->sceneBoundingRect().center();
+            QPointF p2 = mapaNodos[destino]->sceneBoundingRect().center();
+            int distancia = QLineF(p1, p2).length();
+
+            grafo[origen].emplace_back(destino, distancia);
+            grafo[destino].emplace_back(origen, distancia); // Grafo no dirigido
+        }
+    }
+
+    return grafo;
+}
+
+std::pair<std::vector<int>, int> MainWindow::calcularRutaMinima(int origen, int destino) {
+    auto grafo = construirGrafo();
+    if (grafo.empty() || origen >= static_cast<int>(grafo.size()) || destino >= static_cast<int>(grafo.size())) {
+        return {{}, -1};
+    }
+
+    std::priority_queue<std::pair<int, int>,
+                        std::vector<std::pair<int, int>>,
+                        std::greater<std::pair<int, int>>> pq;
+    std::vector<int> dist(grafo.size(), std::numeric_limits<int>::max());
+    std::vector<int> prev(grafo.size(), -1);
+
+    pq.push({0, origen});
+    dist[origen] = 0;
+
+    while (!pq.empty()) {
+        auto [current_dist, u] = pq.top();
+        pq.pop();
+
+        if (u == destino) break;
+        if (current_dist > dist[u]) continue;
+
+        for (const auto& [v, weight] : grafo[u]) {
+            if (dist[v] > dist[u] + weight) {
+                dist[v] = dist[u] + weight;
+                prev[v] = u;
+                pq.push({dist[v], v});
+            }
+        }
+    }
+
+    if (dist[destino] == std::numeric_limits<int>::max()) {
+        return {{}, -1};
+    }
+
+    std::vector<int> ruta;
+    for (int at = destino; at != -1; at = prev[at]) {
+        ruta.push_back(at);
+    }
+    std::reverse(ruta.begin(), ruta.end());
+
+    return {ruta, dist[destino]};
+}
+
+void MainWindow::mostrarRutaMinima(const std::vector<int>& ruta, int distancia) {
     scene->clear();
     cargarNodosDesdeBD();
     cargarRutasDesdeBD();
+
+    if (ruta.empty()) {
+        QMessageBox::information(this, "Ruta Mínima", "No existe camino entre los nodos seleccionados");
+        return;
+    }
+
+    // Resaltar la ruta
+    QPen penRuta(Qt::red, 3);
+    for (size_t i = 0; i < ruta.size() - 1; ++i) {
+        int nodo1 = ruta[i];
+        int nodo2 = ruta[i+1];
+
+        if (mapaNodos.contains(nodo1) && mapaNodos.contains(nodo2)) {
+            QPointF p1 = mapaNodos[nodo1]->sceneBoundingRect().center();
+            QPointF p2 = mapaNodos[nodo2]->sceneBoundingRect().center();
+            QGraphicsLineItem* line = scene->addLine(QLineF(p1, p2), penRuta);
+
+            // Agregar texto con la distancia del segmento
+            QPointF midPoint = (p1 + p2) / 2;
+            QGraphicsTextItem* text = scene->addText(QString::number(QLineF(p1, p2).length(), 'f', 0));
+            text->setPos(midPoint);
+            text->setDefaultTextColor(Qt::red);
+            text->setZValue(1);
+        }
+    }
+
+    // Resaltar los nodos
+    for (int nodoId : ruta) {
+        if (mapaNodos.contains(nodoId)) {
+            for (QGraphicsItem* item : mapaNodos[nodoId]->childItems()) {
+                if (auto elipse = dynamic_cast<QGraphicsEllipseItem*>(item)) {
+                    elipse->setBrush(Qt::yellow);
+                }
+            }
+        }
+    }
+
+    // Mostrar distancia total
+    QGraphicsTextItem* totalDistText = scene->addText(QString("Distancia total: %1").arg(distancia));
+    totalDistText->setDefaultTextColor(Qt::blue);
+    totalDistText->setPos(20, 20);
+    totalDistText->setZValue(1);
+}
+
+void MainWindow::mostrarDialogoRutaMinima() {
+    QDialog dialog(this);
+    dialog.setWindowTitle("Calcular Ruta Mínima");
+
+    QFormLayout form(&dialog);
+    QComboBox *comboOrigen = new QComboBox(&dialog);
+    QComboBox *comboDestino = new QComboBox(&dialog);
+
+    QSqlQuery query("SELECT id, nombre FROM nodos ORDER BY nombre");
+    while (query.next()) {
+        comboOrigen->addItem(query.value("nombre").toString(), query.value("id"));
+        comboDestino->addItem(query.value("nombre").toString(), query.value("id"));
+    }
+
+    form.addRow("Punto de origen:", comboOrigen);
+    form.addRow("Punto de destino:", comboDestino);
+
+    QDialogButtonBox buttonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                               Qt::Horizontal, &dialog);
+    form.addRow(&buttonBox);
+
+    connect(&buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(&buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        int origen = comboOrigen->currentData().toInt();
+        int destino = comboDestino->currentData().toInt();
+        auto [ruta, distancia] = calcularRutaMinima(origen, destino);
+        mostrarRutaMinima(ruta, distancia);
+    }
 }
