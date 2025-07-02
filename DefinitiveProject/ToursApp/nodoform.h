@@ -26,6 +26,8 @@ private:
     Ui::NodoForm *ui;
     QSqlTableModel *modelo;
     int idSeleccionado = -1;
+
+    void conectarBaseDeDatos();
 };
 
 #endif // NODOFORM_H
