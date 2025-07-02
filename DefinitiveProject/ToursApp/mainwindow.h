@@ -51,6 +51,7 @@ private:
     QPushButton *btnCrearNodo;
     QPushButton *btnModificarNodo;
     QPushButton *btnEliminarNodo;
+    void manejarClicCrearNodo(const QPointF& posicion);
 
 
 
@@ -65,6 +66,7 @@ private:
     QGraphicsItemGroup* nodoNuevoDestino = nullptr;
     QGraphicsItemGroup* nodoEliminar1 = nullptr;
     QGraphicsItemGroup* nodoEliminar2 = nullptr;
+    bool esperandoCreacionNodo;
 
 
 
