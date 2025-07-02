@@ -7,6 +7,8 @@
 #include <QGraphicsTextItem>
 #include <QGraphicsLineItem>
 #include <QDebug>
+#include <qcoreevent.h>
+#include <QMouseEvent>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent) {
@@ -34,6 +36,9 @@ void MainWindow::configurarUI() {
     graphicsView->setStyleSheet("border: 2px solid red;");
     scene = new QGraphicsScene(this);
     graphicsView->setScene(scene);
+    graphicsView->setMouseTracking(true);
+    graphicsView->viewport()->installEventFilter(this);
+    connect(btnCrear, &QPushButton::clicked, this, &MainWindow::crearRuta);
 
     QHBoxLayout *botonLayout = new QHBoxLayout;
     botonLayout->addWidget(btnCrear);
@@ -95,6 +100,8 @@ void MainWindow::cargarNodosDesdeBD() {
         nodo->addToGroup(elipse);
         nodo->addToGroup(texto);
         nodo->setPos(x, y);
+        mapaNodos[id] = nodo;
+        nodoPorItem[nodo] = id;
 
 
         scene->addItem(nodo);
@@ -124,4 +131,63 @@ void MainWindow::cargarRutasDesdeBD() {
             linea->setZValue(-1);
         }
     }
+}
+
+void MainWindow::crearRuta() {
+    if (!primerNodoSeleccionado || !segundoNodoSeleccionado) {
+        qDebug() << "Selecciona dos nodos antes de crear la ruta.";
+        return;
+    }
+
+    int origenId = nodoPorItem[primerNodoSeleccionado];
+    int destinoId = nodoPorItem[segundoNodoSeleccionado];
+
+    QPointF p1 = primerNodoSeleccionado->pos() + QPointF(40, 40);  // centro del nodo
+    QPointF p2 = segundoNodoSeleccionado->pos() + QPointF(40, 40);
+
+    QGraphicsLineItem *linea = new QGraphicsLineItem(QLineF(p1, p2));
+    linea->setPen(QPen(Qt::darkBlue, 3));
+    scene->addItem(linea);
+
+    QSqlQuery query;
+    query.prepare("INSERT INTO rutas (origen_id, destino_id) VALUES (:o, :d)");
+    query.bindValue(":o", origenId);
+    query.bindValue(":d", destinoId);
+
+    if (!query.exec()) {
+        qDebug() << "Error al guardar ruta:" << query.lastError().text();
+    } else {
+        qDebug() << "Ruta guardada.";
+    }
+
+    // Restablecer selección
+    primerNodoSeleccionado->setOpacity(1.0);
+    segundoNodoSeleccionado->setOpacity(1.0);
+    primerNodoSeleccionado = nullptr;
+    segundoNodoSeleccionado = nullptr;
+}
+
+bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
+    if (obj == graphicsView->viewport() && event->type() == QEvent::MouseButtonPress) {
+        QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+        QPointF scenePos = graphicsView->mapToScene(mouseEvent->pos());
+
+        QGraphicsItem *item = scene->itemAt(scenePos, QTransform());
+        if (item) {
+            QGraphicsItemGroup* grupo = dynamic_cast<QGraphicsItemGroup*>(item->group());
+            if (!grupo) return false;
+
+            if (!primerNodoSeleccionado) {
+                primerNodoSeleccionado = grupo;
+                grupo->setOpacity(0.5);
+                qDebug() << "Primer nodo seleccionado.";
+            } else if (!segundoNodoSeleccionado && grupo != primerNodoSeleccionado) {
+                segundoNodoSeleccionado = grupo;
+                grupo->setOpacity(0.5);
+                qDebug() << "Segundo nodo seleccionado.";
+            }
+        }
+        return true;
+    }
+    return QMainWindow::eventFilter(obj, event);
 }

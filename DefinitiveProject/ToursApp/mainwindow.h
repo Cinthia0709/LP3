@@ -26,11 +26,16 @@ private:
     QSqlDatabase db;
 
     QMap<int, QGraphicsItemGroup*> mapaNodos;
+    QGraphicsItemGroup* primerNodoSeleccionado = nullptr;
+    QGraphicsItemGroup* segundoNodoSeleccionado = nullptr;
+    QMap<QGraphicsItemGroup*, int> nodoPorItem;
 
     void configurarUI();
     void conectarBaseDeDatos();
     void cargarNodosDesdeBD();
     void cargarRutasDesdeBD();
+    void crearRuta();
+    bool eventFilter(QObject *obj, QEvent *event) override;
 };
 
 #endif // MAINWINDOW_H
