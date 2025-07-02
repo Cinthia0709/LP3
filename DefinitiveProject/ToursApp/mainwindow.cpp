@@ -18,8 +18,7 @@
 #include <algorithm>
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), timerAnimacion(new QTimer(this)), indiceAnimacion(0), esperandoCreacionNodo(false)
-{
+    : QMainWindow(parent), timerAnimacion(new QTimer(this)), indiceAnimacion(0) {
     configurarUI();
     conectarBaseDeDatos();
     cargarNodosDesdeBD();
@@ -27,30 +26,23 @@ MainWindow::MainWindow(QWidget *parent)
     connect(timerAnimacion, &QTimer::timeout, this, &MainWindow::avanzarAnimacion);
 }
 
-MainWindow::~MainWindow()
-{
+MainWindow::~MainWindow() {
     if (db.isOpen())
         db.close();
     delete timerAnimacion;
 }
 
-void MainWindow::configurarUI()
-{
+void MainWindow::configurarUI() {
     centralWidget = new QWidget(this);
     setCentralWidget(centralWidget);
     setWindowTitle("Sistema de Rutas Turísticas");
 
-    // Configuración de botones de rutas
+    // Configuración de botones
     btnCrear = new QPushButton("Crear Ruta");
     btnModificar = new QPushButton("Modificar Ruta");
     btnEliminar = new QPushButton("Eliminar Ruta");
     btnRutaMinima = new QPushButton("Ruta Mínima");
     btnRecorrido = new QPushButton("Recorrido BFS/DFS");
-
-    // Configuración de botones de nodos
-    btnCrearNodo = new QPushButton("Crear Nodo");
-    btnModificarNodo = new QPushButton("Modificar Nodo");
-    btnEliminarNodo = new QPushButton("Eliminar Nodo");
 
     // Configuración del área gráfica
     graphicsView = new QGraphicsView(this);
@@ -61,79 +53,44 @@ void MainWindow::configurarUI()
     graphicsView->setMouseTracking(true);
     graphicsView->viewport()->installEventFilter(this);
 
-    // Conexiones de botones de rutas
+    // Conexiones de botones
     connect(btnCrear, &QPushButton::clicked, this, [this]() {
         modoActual = CrearRuta;
-        esperandoCreacionNodo = false;
         resetSeleccionModificacion();
         qDebug() << "Modo: Crear Ruta activado.";
     });
 
     connect(btnModificar, &QPushButton::clicked, this, [this]() {
         modoActual = ModificarRuta;
-        esperandoCreacionNodo = false;
         resetSeleccionModificacion();
         qDebug() << "Modo: Modificar Ruta activado.";
     });
 
     connect(btnEliminar, &QPushButton::clicked, this, [this]() {
         modoActual = EliminarRuta;
-        esperandoCreacionNodo = false;
         resetSeleccionModificacion();
         qDebug() << "Modo: Eliminar Ruta activado.";
     });
 
-    // Conexiones de botones de nodos
-    connect(btnCrearNodo, &QPushButton::clicked, this, [this]() {
-        modoActual = CrearNodo;
-        esperandoCreacionNodo = true;
-        resetSeleccionModificacion();
-        QMessageBox::information(this, "Crear Nodo",
-                                 "Haz clic en la vista gráfica para colocar el nuevo nodo");
-        qDebug() << "Modo: Crear Nodo activado. Esperando clic...";
-    });
-
-    connect(btnModificarNodo, &QPushButton::clicked, this, [this]() {
-        modoActual = ModificarNodo;
-        esperandoCreacionNodo = false;
-        resetSeleccionModificacion();
-        qDebug() << "Modo: Modificar Nodo activado.";
-    });
-
-    connect(btnEliminarNodo, &QPushButton::clicked, this, [this]() {
-        modoActual = EliminarNodo;
-        esperandoCreacionNodo = false;
-        resetSeleccionModificacion();
-        qDebug() << "Modo: Eliminar Nodo activado.";
-    });
-
-    // Conexiones de botones de algoritmos
     connect(btnRutaMinima, &QPushButton::clicked, this, &MainWindow::mostrarDialogoRutaMinima);
     connect(btnRecorrido, &QPushButton::clicked, this, &MainWindow::mostrarDialogoRecorrido);
 
     // Diseño de la interfaz
-    QHBoxLayout *botonRutasLayout = new QHBoxLayout;
-    botonRutasLayout->addWidget(btnCrear);
-    botonRutasLayout->addWidget(btnModificar);
-    botonRutasLayout->addWidget(btnEliminar);
-    botonRutasLayout->addWidget(btnRutaMinima);
-    botonRutasLayout->addWidget(btnRecorrido);
-
-    QHBoxLayout *botonNodosLayout = new QHBoxLayout;
-    botonNodosLayout->addWidget(btnCrearNodo);
-    botonNodosLayout->addWidget(btnModificarNodo);
-    botonNodosLayout->addWidget(btnEliminarNodo);
+    QHBoxLayout *botonLayout = new QHBoxLayout;
+    botonLayout->addWidget(btnCrear);
+    botonLayout->addWidget(btnModificar);
+    botonLayout->addWidget(btnEliminar);
+    botonLayout->addWidget(btnRutaMinima);
+    botonLayout->addWidget(btnRecorrido);
 
     QVBoxLayout *mainLayout = new QVBoxLayout;
-    mainLayout->addLayout(botonRutasLayout);
-    mainLayout->addLayout(botonNodosLayout);
+    mainLayout->addLayout(botonLayout);
     mainLayout->addWidget(graphicsView);
 
     centralWidget->setLayout(mainLayout);
 }
 
-void MainWindow::conectarBaseDeDatos()
-{
+void MainWindow::conectarBaseDeDatos() {
     db = QSqlDatabase::addDatabase("QSQLITE");
     db.setDatabaseName("C:\\LP3\\LP3\\DefinitiveProject\\ToursApp\\Toursapp.sqlite");
 
@@ -144,8 +101,7 @@ void MainWindow::conectarBaseDeDatos()
     }
 }
 
-void MainWindow::cargarNodosDesdeBD()
-{
+void MainWindow::cargarNodosDesdeBD() {
     if (!db.isOpen()) return;
 
     QSqlQuery query("SELECT id, nombre, x, y FROM nodos");
@@ -181,8 +137,7 @@ void MainWindow::cargarNodosDesdeBD()
     cargarRutasDesdeBD();
 }
 
-void MainWindow::cargarRutasDesdeBD()
-{
+void MainWindow::cargarRutasDesdeBD() {
     if (!db.isOpen()) return;
 
     QSqlQuery query("SELECT origen_id, destino_id FROM rutas");
@@ -202,93 +157,66 @@ void MainWindow::cargarRutasDesdeBD()
     }
 }
 
-bool MainWindow::eventFilter(QObject *obj, QEvent *event)
-{
-    if (obj == graphicsView->viewport()) {
-        if (event->type() == QEvent::MouseButtonPress) {
-            QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
-            QPointF scenePos = graphicsView->mapToScene(mouseEvent->pos());
-            int x = static_cast<int>(scenePos.x());
-            int y = static_cast<int>(scenePos.y());
+bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
+    if (obj == graphicsView->viewport() && event->type() == QEvent::MouseButtonPress) {
+        QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+        QPointF scenePos = graphicsView->mapToScene(mouseEvent->pos());
 
-            QGraphicsItem *item = scene->itemAt(scenePos, QTransform());
+        QGraphicsItem *item = scene->itemAt(scenePos, QTransform());
+        if (!item) return false;
 
-            if (esperandoCreacionNodo) {
-                // Modo creación de nodo
-                bool ok;
-                QString nombre = QInputDialog::getText(this, "Nombre del nodo",
-                                                       "Ingrese el nombre del nodo:",
-                                                       QLineEdit::Normal, "", &ok);
-                if (ok && !nombre.isEmpty()) {
-                    // Guardar en base de datos (coordenadas como enteros)
-                    QSqlQuery query;
-                    query.prepare("INSERT INTO nodos (nombre, x, y) VALUES (:nombre, :x, :y)");
-                    query.bindValue(":nombre", nombre);
-                    query.bindValue(":x", x);
-                    query.bindValue(":y", y);
+        QGraphicsItemGroup* grupo = nullptr;
+        if (item->type() == QGraphicsItemGroup::Type) {
+            grupo = static_cast<QGraphicsItemGroup*>(item);
+        } else if (item->parentItem() && item->parentItem()->type() == QGraphicsItemGroup::Type) {
+            grupo = static_cast<QGraphicsItemGroup*>(item->parentItem());
+        }
 
-                    if (query.exec()) {
-                        // Crear visualización del nodo
-                        QGraphicsEllipseItem *elipse = new QGraphicsEllipseItem(0, 0, 30, 30);
-                        elipse->setBrush(Qt::blue);
-                        elipse->setPen(QPen(Qt::black));
+        if (!grupo || !nodoPorItem.contains(grupo)) return false;
 
-                        QGraphicsTextItem *texto = new QGraphicsTextItem(nombre);
-                        texto->setDefaultTextColor(Qt::white);
-                        texto->setPos(5, 5);
-
-                        QGraphicsItemGroup *nodo = new QGraphicsItemGroup();
-                        nodo->addToGroup(elipse);
-                        nodo->addToGroup(texto);
-                        nodo->setPos(x, y);
-
-                        int id = query.lastInsertId().toInt();
-                        mapaNodos[id] = nodo;
-                        nodoPorItem[nodo] = id;
-                        scene->addItem(nodo);
-
-                        qDebug() << "Nodo creado en posición:" << x << "," << y;
-                    } else {
-                        QMessageBox::critical(this, "Error",
-                                              "No se pudo crear el nodo: " + query.lastError().text());
-                    }
-                }
-                esperandoCreacionNodo = false;
-                modoActual = Ninguno;
-                return true;
+        switch (modoActual) {
+        case CrearRuta:
+            if (!primerNodoSeleccionado) {
+                primerNodoSeleccionado = grupo;
+                grupo->setOpacity(0.7);
+            } else if (!segundoNodoSeleccionado && grupo != primerNodoSeleccionado) {
+                segundoNodoSeleccionado = grupo;
+                grupo->setOpacity(0.7);
+                crearRuta();
             }
-            else if (item) {
-                // Resto de la lógica para otros modos...
-                QGraphicsItemGroup* grupo = nullptr;
-                if (item->type() == QGraphicsItemGroup::Type) {
-                    grupo = static_cast<QGraphicsItemGroup*>(item);
-                } else if (item->parentItem() && item->parentItem()->type() == QGraphicsItemGroup::Type) {
-                    grupo = static_cast<QGraphicsItemGroup*>(item->parentItem());
-                }
+            return true;
 
-                if (!grupo || !nodoPorItem.contains(grupo)) return false;
-
-                switch (modoActual) {
-                case CrearRuta:
-                    // ... (resto del código existente para crear rutas)
-                case ModificarRuta:
-                    // ... (resto del código existente para modificar rutas)
-                case EliminarRuta:
-                    // ... (resto del código existente para eliminar rutas)
-                case ModificarNodo:
-                    // ... (resto del código existente para modificar nodos)
-                case EliminarNodo:
-                    // ... (resto del código existente para eliminar nodos)
-                default:
-                    return false;
-                }
+        case ModificarRuta:
+            if (!nodoOrigenMod) {
+                nodoOrigenMod = grupo;
+                grupo->setOpacity(0.7);
+            } else if (!nodoDestinoActual && grupo != nodoOrigenMod) {
+                nodoDestinoActual = grupo;
+                grupo->setOpacity(0.7);
+            } else if (!nodoNuevoDestino && grupo != nodoOrigenMod && grupo != nodoDestinoActual) {
+                nodoNuevoDestino = grupo;
+                grupo->setOpacity(0.7);
+                modificarRuta();
             }
+            return true;
+
+        case EliminarRuta:
+            if (!nodoEliminar1) {
+                nodoEliminar1 = grupo;
+                grupo->setOpacity(0.7);
+            } else if (!nodoEliminar2 && grupo != nodoEliminar1) {
+                nodoEliminar2 = grupo;
+                grupo->setOpacity(0.7);
+                eliminarRuta();
+            }
+            return true;
+
+        default:
+            return false;
         }
     }
     return QMainWindow::eventFilter(obj, event);
 }
-
-
 
 void MainWindow::crearRuta() {
     if (!primerNodoSeleccionado || !segundoNodoSeleccionado) return;
