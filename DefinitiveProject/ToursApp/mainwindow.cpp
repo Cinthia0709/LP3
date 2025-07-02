@@ -46,6 +46,12 @@ void MainWindow::configurarUI() {
         nodoNuevoDestino = nullptr;
         qDebug() << "Modo: Modificar Ruta activado.";
     });
+    connect(btnEliminar, &QPushButton::clicked, this, [this]() {
+        modoActual = EliminarRuta;
+        nodoEliminar1 = nullptr;
+        nodoEliminar2 = nullptr;
+        qDebug() << "Modo: Eliminar Ruta activado.";
+    });
 
     QHBoxLayout *botonLayout = new QHBoxLayout;
     botonLayout->addWidget(btnCrear);
@@ -191,7 +197,6 @@ void MainWindow::crearRuta() {
         qDebug() << "Ruta creada entre" << origenId << "y" << destinoId;
     }
 
-    // Limpiar selección
     primerNodoSeleccionado->setOpacity(1.0);
     segundoNodoSeleccionado->setOpacity(1.0);
     primerNodoSeleccionado = nullptr;
@@ -206,9 +211,7 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
         QGraphicsItem *item = scene->itemAt(scenePos, QTransform());
         if (!item) return false;
 
-        // Buscar el grupo al que pertenece el item (el nodo)
         QGraphicsItemGroup* grupo = nullptr;
-
         if (item->type() == QGraphicsItemGroup::Type) {
             grupo = static_cast<QGraphicsItemGroup*>(item);
         } else if (item->parentItem() && item->parentItem()->type() == QGraphicsItemGroup::Type) {
@@ -217,7 +220,7 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
 
         if (!grupo || !nodoPorItem.contains(grupo)) return false;
 
-        // MODO: CREAR RUTA
+        // ================== CREAR RUTA ==================
         if (modoActual == CrearRuta) {
             if (!primerNodoSeleccionado) {
                 primerNodoSeleccionado = grupo;
@@ -227,12 +230,12 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
                 segundoNodoSeleccionado = grupo;
                 grupo->setOpacity(0.5);
                 qDebug() << "Segundo nodo seleccionado.";
-                crearRuta();  // llama a la función cuando hay dos nodos
+                crearRuta();
             }
             return true;
         }
 
-        // MODO: MODIFICAR RUTA
+        // ================== MODIFICAR RUTA ==================
         if (modoActual == ModificarRuta) {
             if (!nodoOrigenMod) {
                 nodoOrigenMod = grupo;
@@ -246,20 +249,37 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
                 nodoNuevoDestino = grupo;
                 grupo->setOpacity(0.5);
                 qDebug() << "Nuevo destino seleccionado.";
-                modificarRuta();  // ejecuta el cambio
+                modificarRuta();
+            }
+            return true;
+        }
+
+        // ================== ELIMINAR RUTA ==================
+        if (modoActual == EliminarRuta) {
+            if (!nodoEliminar1) {
+                nodoEliminar1 = grupo;
+                grupo->setOpacity(0.5);
+                qDebug() << "Primer nodo para eliminar.";
+            } else if (!nodoEliminar2 && grupo != nodoEliminar1) {
+                nodoEliminar2 = grupo;
+                grupo->setOpacity(0.5);
+                qDebug() << "Segundo nodo para eliminar.";
+                eliminarRuta();
             }
             return true;
         }
     }
+
     return QMainWindow::eventFilter(obj, event);
 }
+
 
 void MainWindow::modificarRuta() {
     int origenId = nodoPorItem[nodoOrigenMod];
     int destinoActualId = nodoPorItem[nodoDestinoActual];
     int nuevoDestinoId = nodoPorItem[nodoNuevoDestino];
 
-    // Verificar si la ruta actual existe
+
     QSqlQuery checkQuery;
     checkQuery.prepare(R"(
         SELECT id FROM rutas
@@ -277,7 +297,6 @@ void MainWindow::modificarRuta() {
 
     int rutaId = checkQuery.value(0).toInt();
 
-    // Actualizar la ruta
     QSqlQuery updateQuery;
     updateQuery.prepare("UPDATE rutas SET destino_id = :nuevo WHERE id = :id");
     updateQuery.bindValue(":nuevo", nuevoDestinoId);
@@ -289,10 +308,10 @@ void MainWindow::modificarRuta() {
         qDebug() << "Ruta modificada en BD.";
     }
 
-    // Redibujar (borramos todas y recargamos desde BD)
+
     scene->clear();
     cargarNodosDesdeBD();
-    cargarRutasDesdeBD(); // asegúrate de tener esta función
+    cargarRutasDesdeBD();
 
     resetSeleccionModificacion();
 }
@@ -306,4 +325,39 @@ void MainWindow::resetSeleccionModificacion() {
     nodoDestinoActual = nullptr;
     nodoNuevoDestino = nullptr;
     modoActual = Ninguno;
+}
+
+void MainWindow::eliminarRuta() {
+    int id1 = nodoPorItem[nodoEliminar1];
+    int id2 = nodoPorItem[nodoEliminar2];
+
+    // Verificar si existe
+    QSqlQuery query;
+    query.prepare(R"(
+        DELETE FROM rutas
+        WHERE (origen_id = :a AND destino_id = :b)
+           OR (origen_id = :b AND destino_id = :a)
+    )");
+    query.bindValue(":a", id1);
+    query.bindValue(":b", id2);
+
+    if (!query.exec()) {
+        qDebug() << "Error al eliminar ruta:" << query.lastError().text();
+    } else if (query.numRowsAffected() == 0) {
+        qDebug() << "No se encontró la ruta para eliminar.";
+    } else {
+        qDebug() << "Ruta eliminada correctamente.";
+    }
+
+    // Limpiar selección y recargar escena
+    nodoEliminar1->setOpacity(1.0);
+    nodoEliminar2->setOpacity(1.0);
+    nodoEliminar1 = nullptr;
+    nodoEliminar2 = nullptr;
+    modoActual = Ninguno;
+
+    // Redibujar
+    scene->clear();
+    cargarNodosDesdeBD();
+    cargarRutasDesdeBD();
 }

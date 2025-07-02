@@ -32,18 +32,20 @@ private:
     QGraphicsItemGroup* nodoDestinoActual = nullptr;
     QGraphicsItemGroup* nodoNuevoDestino = nullptr;
     QMap<QGraphicsItemGroup*, int> nodoPorItem;
+    QGraphicsItemGroup* nodoEliminar1 = nullptr;
+    QGraphicsItemGroup* nodoEliminar2 = nullptr;
 
     void configurarUI();
     void conectarBaseDeDatos();
     void cargarNodosDesdeBD();
     void cargarRutasDesdeBD();
     void crearRuta();
+    void eliminarRuta();
     void modificarRuta();
     void resetSeleccionModificacion();
     bool eventFilter(QObject *obj, QEvent *event) override;
-    enum ModoSeleccion { Ninguno, CrearRuta, ModificarRuta };
+    enum ModoSeleccion { Ninguno, CrearRuta, ModificarRuta, EliminarRuta };
     ModoSeleccion modoActual = Ninguno;
-
 
 };
 
