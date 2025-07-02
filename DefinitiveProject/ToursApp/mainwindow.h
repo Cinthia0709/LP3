@@ -2,22 +2,35 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <QPushButton>
+#include <QGraphicsView>
+#include <QGraphicsScene>
+#include <QSqlDatabase>
+#include <QMap>
+#include <QGraphicsItemGroup>
 
-QT_BEGIN_NAMESPACE
-namespace Ui {
-class MainWindow;
-}
-QT_END_NAMESPACE
-
-class MainWindow : public QMainWindow
-{
+class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
-    MainWindow(QWidget *parent = nullptr);
+    explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
 private:
-    Ui::MainWindow *ui;
+    QWidget *centralWidget;
+    QPushButton *btnCrear;
+    QPushButton *btnModificar;
+    QPushButton *btnEliminar;
+    QGraphicsView *graphicsView;
+    QGraphicsScene *scene;
+    QSqlDatabase db;
+
+    QMap<int, QGraphicsItemGroup*> mapaNodos;
+
+    void configurarUI();
+    void conectarBaseDeDatos();
+    void cargarNodosDesdeBD();
+    void cargarRutasDesdeBD();
 };
+
 #endif // MAINWINDOW_H
