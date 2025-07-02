@@ -7,6 +7,8 @@ NodoForm::NodoForm(QWidget *parent) :
 {
     ui->setupUi(this);
 
+    conectarBaseDeDatos();
+
     modelo = new QSqlTableModel(this);
     modelo->setTable("nodos");
     modelo->select();
@@ -20,6 +22,23 @@ NodoForm::NodoForm(QWidget *parent) :
 NodoForm::~NodoForm()
 {
     delete ui;
+}
+
+void NodoForm::conectarBaseDeDatos()
+{
+    QSqlDatabase db = QSqlDatabase::addDatabase("QMYSQL");
+
+    db.setHostName("localhost"); // o IP si está en servidor
+    db.setPort(3306);            // puerto de MariaDB
+    db.setDatabaseName("tours_arequipa");
+    db.setUserName("tu_usuario");      //cambiar por el real 
+    db.setPassword("tu_contraseña");   //cambiar por el real
+
+    if (!db.open()) {
+        qDebug() << "Error al conectar con MariaDB:" << db.lastError().text();
+    } else {
+        qDebug() << "Conexión a MariaDB exitosa.";
+    }
 }
 
 void NodoForm::cargarNodos()
@@ -51,7 +70,7 @@ void NodoForm::guardarNodo()
         query.addBindValue(idSeleccionado);
 
     if (!query.exec())
-        qDebug() << "Error al guardar nodo:" << query.lastError();
+        qDebug() << "Error al guardar nodo:" << query.lastError().text();
 
     idSeleccionado = -1;
     cargarNodos();
