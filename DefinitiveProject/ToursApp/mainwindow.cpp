@@ -130,34 +130,24 @@ void MainWindow::cargarNodosDesdeBD() {
         int x = query.value("x").toInt();
         int y = query.value("y").toInt();
 
-        // Crear elipse y texto
         QGraphicsEllipseItem *elipse = new QGraphicsEllipseItem(0, 0, 30, 30);
         elipse->setBrush(Qt::blue);
-        elipse->setPen(QPen(Qt::black));
-        elipse->setZValue(1);  // Asegura que esté sobre las líneas
 
         QGraphicsTextItem *texto = new QGraphicsTextItem(nombre);
         texto->setDefaultTextColor(Qt::white);
         texto->setPos(5, 5);
 
-        // Crear grupo
         QGraphicsItemGroup *nodo = new QGraphicsItemGroup();
         nodo->addToGroup(elipse);
         nodo->addToGroup(texto);
         nodo->setPos(x, y);
-        nodo->setZValue(10);  // Muy al frente
 
-        // Habilitar interacción
-        nodo->setFlag(QGraphicsItem::ItemIsSelectable, true);
-        nodo->setFlag(QGraphicsItem::ItemIsFocusable, true);
-
-        // Guardar en estructuras
         mapaNodos[id] = nodo;
         nodoPorItem[nodo] = id;
         scene->addItem(nodo);
     }
 
-    cargarRutasDesdeBD();
+    cargarRutasDesdeBD();  // 🟢 Cargar rutas después de nodos
 }
 
 void MainWindow::cargarRutasDesdeBD() {
@@ -204,10 +194,12 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
             if (!primerNodoSeleccionado) {
                 primerNodoSeleccionado = grupo;
                 grupo->setOpacity(0.7);
+                qDebug() << "Primer nodo seleccionado";
             } else if (!segundoNodoSeleccionado && grupo != primerNodoSeleccionado) {
                 segundoNodoSeleccionado = grupo;
                 grupo->setOpacity(0.7);
-                crearRuta();
+                qDebug() << "Segundo nodo seleccionado";
+                crearRuta(); // Aquí debe llamarse
             }
             return true;
 
@@ -244,37 +236,26 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
 }
 
 void MainWindow::crearRuta() {
-    qDebug() << "crearRuta() ejecutándose";
+    if (!primerNodoSeleccionado || !segundoNodoSeleccionado) return;
 
-    if (!primerNodoSeleccionado || !segundoNodoSeleccionado) {
-        qDebug() << "Faltan nodos para crear la ruta";
-        return;
-    }
+    int origenId = nodoPorItem.value(primerNodoSeleccionado, -1);
+    int destinoId = nodoPorItem.value(segundoNodoSeleccionado, -1);
 
-    int origenId = nodoPorItem[primerNodoSeleccionado];
-    int destinoId = nodoPorItem[segundoNodoSeleccionado];
-    qDebug() << "Intentando crear ruta de" << origenId << "a" << destinoId;
+    qDebug() << "IDs: origen" << origenId << "destino" << destinoId;
 
-    // Verificar si ya existe
+    if (origenId == -1 || destinoId == -1 || origenId == destinoId) return;
+
     QSqlQuery checkQuery;
-    checkQuery.prepare("SELECT COUNT(*) FROM rutas WHERE "
-                       "(origen_id = :origen AND destino_id = :destino) OR "
-                       "(origen_id = :destino AND destino_id = :origen)");
+    checkQuery.prepare("SELECT COUNT(*) FROM rutas WHERE (origen_id = :origen AND destino_id = :destino) OR (origen_id = :destino AND destino_id = :origen)");
     checkQuery.bindValue(":origen", origenId);
     checkQuery.bindValue(":destino", destinoId);
 
-    if (!checkQuery.exec()) {
-        qDebug() << "Error al verificar existencia de ruta:" << checkQuery.lastError().text();
-        return;
-    }
-
-    if (checkQuery.next() && checkQuery.value(0).toInt() > 0) {
+    if (!checkQuery.exec() || !checkQuery.next() || checkQuery.value(0).toInt() > 0) {
         QMessageBox::warning(this, "Advertencia", "La ruta ya existe");
         resetSeleccionModificacion();
         return;
     }
 
-    // Insertar ruta
     QSqlQuery insertQuery;
     insertQuery.prepare("INSERT INTO rutas (origen_id, destino_id) VALUES (:origen, :destino)");
     insertQuery.bindValue(":origen", origenId);
@@ -282,16 +263,56 @@ void MainWindow::crearRuta() {
 
     if (!insertQuery.exec()) {
         QMessageBox::critical(this, "Error", "No se pudo crear la ruta: " + insertQuery.lastError().text());
-        qDebug() << "Error al insertar:" << insertQuery.lastError().text();
-        return;
     }
 
-    qDebug() << "Ruta insertada exitosamente";
-
-    // Actualizar
     resetSeleccionModificacion();
     cargarNodosDesdeBD();
 }
+
+void MainWindow::mostrarRutaMinima(const std::vector<int>& ruta, int distancia) {
+    scene->clear();
+    cargarNodosDesdeBD();
+    cargarRutasDesdeBD();
+
+    if (ruta.empty()) {
+        QMessageBox::information(this, "Ruta Mínima", "No existe camino entre los nodos seleccionados");
+        return;
+    }
+
+    QPen penRuta(Qt::red, 3);
+    for (size_t i = 0; i < ruta.size() - 1; ++i) {
+        int nodo1 = ruta[i];
+        int nodo2 = ruta[i+1];
+
+        if (mapaNodos.contains(nodo1) && mapaNodos.contains(nodo2)) {
+            QPointF p1 = mapaNodos[nodo1]->sceneBoundingRect().center();
+            QPointF p2 = mapaNodos[nodo2]->sceneBoundingRect().center();
+            scene->addLine(QLineF(p1, p2), penRuta);
+
+            QPointF midPoint = (p1 + p2) / 2;
+            QGraphicsTextItem* text = scene->addText(QString::number(QLineF(p1, p2).length(), 'f', 0));
+            text->setPos(midPoint);
+            text->setDefaultTextColor(Qt::red);
+            text->setZValue(1);
+        }
+    }
+
+    for (int nodoId : ruta) {
+        if (mapaNodos.contains(nodoId)) {
+            for (QGraphicsItem* item : mapaNodos[nodoId]->childItems()) {
+                if (auto elipse = dynamic_cast<QGraphicsEllipseItem*>(item)) {
+                    elipse->setBrush(Qt::yellow);
+                }
+            }
+        }
+    }
+
+    QGraphicsTextItem* totalDistText = scene->addText(QString("Distancia total: %1").arg(distancia));
+    totalDistText->setDefaultTextColor(Qt::blue);
+    totalDistText->setPos(20, 20);
+    totalDistText->setZValue(1);
+}
+
 void MainWindow::modificarRuta() {
     if (!nodoOrigenMod || !nodoDestinoActual || !nodoNuevoDestino) return;
 
@@ -424,53 +445,6 @@ std::pair<std::vector<int>, int> MainWindow::calcularRutaMinima(int origen, int 
     return {ruta, dist[destino]};
 }
 
-void MainWindow::mostrarRutaMinima(const std::vector<int>& ruta, int distancia) {
-    scene->clear();
-    cargarNodosDesdeBD();
-    cargarRutasDesdeBD();
-
-    if (ruta.empty()) {
-        QMessageBox::information(this, "Ruta MÃ­nima", "No existe camino entre los nodos seleccionados");
-        return;
-    }
-
-    // Resaltar la ruta
-    QPen penRuta(Qt::red, 3);
-    for (size_t i = 0; i < ruta.size() - 1; ++i) {
-        int nodo1 = ruta[i];
-        int nodo2 = ruta[i+1];
-
-        if (mapaNodos.contains(nodo1) && mapaNodos.contains(nodo2)) {
-            QPointF p1 = mapaNodos[nodo1]->sceneBoundingRect().center();
-            QPointF p2 = mapaNodos[nodo2]->sceneBoundingRect().center();
-            QGraphicsLineItem* line = scene->addLine(QLineF(p1, p2), penRuta);
-
-            // Agregar texto con la distancia del segmento
-            QPointF midPoint = (p1 + p2) / 2;
-            QGraphicsTextItem* text = scene->addText(QString::number(QLineF(p1, p2).length(), 'f', 0));
-            text->setPos(midPoint);
-            text->setDefaultTextColor(Qt::red);
-            text->setZValue(1);
-        }
-    }
-
-    // Resaltar los nodos
-    for (int nodoId : ruta) {
-        if (mapaNodos.contains(nodoId)) {
-            for (QGraphicsItem* item : mapaNodos[nodoId]->childItems()) {
-                if (auto elipse = dynamic_cast<QGraphicsEllipseItem*>(item)) {
-                    elipse->setBrush(Qt::yellow);
-                }
-            }
-        }
-    }
-
-    // Mostrar distancia total
-    QGraphicsTextItem* totalDistText = scene->addText(QString("Distancia total: %1").arg(distancia));
-    totalDistText->setDefaultTextColor(Qt::blue);
-    totalDistText->setPos(20, 20);
-    totalDistText->setZValue(1);
-}
 
 void MainWindow::mostrarDialogoRutaMinima() {
     QDialog dialog(this);
@@ -554,18 +528,20 @@ void MainWindow::mostrarDialogoRecorrido() {
 
 void MainWindow::mostrarDialogoCrearNodo() {
     QDialog dialog(this);
-    dialog.setWindowTitle("Agregar Nodo Turístico");
+    dialog.setWindowTitle("Crear Nodo");
+    dialog.setFixedSize(300, 200);
 
     QFormLayout form(&dialog);
-    QLineEdit *editNombre = new QLineEdit(&dialog);
+
+    QLineEdit *nombreEdit = new QLineEdit(&dialog);
     QSpinBox *spinX = new QSpinBox(&dialog);
     QSpinBox *spinY = new QSpinBox(&dialog);
-    spinX->setRange(0, 1000);
-    spinY->setRange(0, 1000);
+    spinX->setRange(0, 800);
+    spinY->setRange(0, 600);
 
-    form.addRow("Nombre del lugar:", editNombre);
-    form.addRow("Posición X:", spinX);
-    form.addRow("Posición Y:", spinY);
+    form.addRow("Nombre:", nombreEdit);
+    form.addRow("Coordenada X:", spinX);
+    form.addRow("Coordenada Y:", spinY);
 
     QDialogButtonBox buttonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, Qt::Horizontal, &dialog);
     form.addRow(&buttonBox);
@@ -574,11 +550,11 @@ void MainWindow::mostrarDialogoCrearNodo() {
     connect(&buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
     if (dialog.exec() == QDialog::Accepted) {
-        QString nombre = editNombre->text().trimmed();
+        QString nombre = nombreEdit->text();
         int x = spinX->value();
         int y = spinY->value();
 
-        if (nombre.isEmpty()) {
+        if (nombre.trimmed().isEmpty()) {
             QMessageBox::warning(this, "Advertencia", "El nombre no puede estar vacío.");
             return;
         }
@@ -590,11 +566,10 @@ void MainWindow::mostrarDialogoCrearNodo() {
         insertQuery.bindValue(":y", y);
 
         if (!insertQuery.exec()) {
-            QMessageBox::critical(this, "Error", "No se pudo agregar el nodo: " + insertQuery.lastError().text());
-            return;
+            QMessageBox::critical(this, "Error", "No se pudo crear el nodo: " + insertQuery.lastError().text());
+        } else {
+            cargarNodosDesdeBD();
         }
-
-        cargarNodosDesdeBD();
     }
 }
 

@@ -17,6 +17,8 @@
 #include <QDialogButtonBox>
 #include <QMessageBox>
 #include <QMouseEvent>
+#include <QSpinBox> // NECESARIO para crear nodos
+#include <QDebug>   // Opcional: útil para depuración
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
