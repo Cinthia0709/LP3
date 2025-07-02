@@ -142,25 +142,49 @@ void MainWindow::crearRuta() {
     int origenId = nodoPorItem[primerNodoSeleccionado];
     int destinoId = nodoPorItem[segundoNodoSeleccionado];
 
-    QPointF p1 = primerNodoSeleccionado->pos() + QPointF(40, 40);  // centro del nodo
-    QPointF p2 = segundoNodoSeleccionado->pos() + QPointF(40, 40);
+    QSqlQuery checkQuery;
+    checkQuery.prepare(R"(
+        SELECT COUNT(*) FROM rutas
+        WHERE (origen_id = :o AND destino_id = :d)
+           OR (origen_id = :d AND destino_id = :o)
+    )");
+    checkQuery.bindValue(":o", origenId);
+    checkQuery.bindValue(":d", destinoId);
 
-    QGraphicsLineItem *linea = new QGraphicsLineItem(QLineF(p1, p2));
-    linea->setPen(QPen(Qt::darkBlue, 3));
-    scene->addItem(linea);
-
-    QSqlQuery query;
-    query.prepare("INSERT INTO rutas (origen_id, destino_id) VALUES (:o, :d)");
-    query.bindValue(":o", origenId);
-    query.bindValue(":d", destinoId);
-
-    if (!query.exec()) {
-        qDebug() << "Error al guardar ruta:" << query.lastError().text();
-    } else {
-        qDebug() << "Ruta guardada.";
+    if (!checkQuery.exec()) {
+        qDebug() << "Error al verificar existencia de ruta:" << checkQuery.lastError().text();
+        return;
     }
 
-    // Restablecer selección
+    if (checkQuery.next() && checkQuery.value(0).toInt() > 0) {
+        qDebug() << "La ruta entre" << origenId << "y" << destinoId << "ya existe.";
+        primerNodoSeleccionado->setOpacity(1.0);
+        segundoNodoSeleccionado->setOpacity(1.0);
+        primerNodoSeleccionado = nullptr;
+        segundoNodoSeleccionado = nullptr;
+        return;
+    }
+
+    QPointF p1 = primerNodoSeleccionado->pos() + QPointF(200, 200);
+    QPointF p2 = segundoNodoSeleccionado->pos() + QPointF(200, 200);
+
+
+    QGraphicsLineItem *linea = new QGraphicsLineItem(QLineF(p1, p2));
+    linea->setPen(QPen(Qt::blue, 3));
+    scene->addItem(linea);
+
+    QSqlQuery insertQuery;
+    insertQuery.prepare("INSERT INTO rutas (origen_id, destino_id) VALUES (:o, :d)");
+    insertQuery.bindValue(":o", origenId);
+    insertQuery.bindValue(":d", destinoId);
+
+    if (!insertQuery.exec()) {
+        qDebug() << "Error al guardar ruta:" << insertQuery.lastError().text();
+    } else {
+        qDebug() << "Ruta creada entre" << origenId << "y" << destinoId;
+    }
+
+    // Limpiar selección
     primerNodoSeleccionado->setOpacity(1.0);
     segundoNodoSeleccionado->setOpacity(1.0);
     primerNodoSeleccionado = nullptr;
