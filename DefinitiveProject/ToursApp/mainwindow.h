@@ -28,6 +28,9 @@ private:
     QMap<int, QGraphicsItemGroup*> mapaNodos;
     QGraphicsItemGroup* primerNodoSeleccionado = nullptr;
     QGraphicsItemGroup* segundoNodoSeleccionado = nullptr;
+    QGraphicsItemGroup* nodoOrigenMod = nullptr;
+    QGraphicsItemGroup* nodoDestinoActual = nullptr;
+    QGraphicsItemGroup* nodoNuevoDestino = nullptr;
     QMap<QGraphicsItemGroup*, int> nodoPorItem;
 
     void configurarUI();
@@ -35,7 +38,13 @@ private:
     void cargarNodosDesdeBD();
     void cargarRutasDesdeBD();
     void crearRuta();
+    void modificarRuta();
+    void resetSeleccionModificacion();
     bool eventFilter(QObject *obj, QEvent *event) override;
+    enum ModoSeleccion { Ninguno, CrearRuta, ModificarRuta };
+    ModoSeleccion modoActual = Ninguno;
+
+
 };
 
 #endif // MAINWINDOW_H

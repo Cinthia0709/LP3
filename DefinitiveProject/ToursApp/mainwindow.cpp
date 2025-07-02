@@ -39,6 +39,13 @@ void MainWindow::configurarUI() {
     graphicsView->setMouseTracking(true);
     graphicsView->viewport()->installEventFilter(this);
     connect(btnCrear, &QPushButton::clicked, this, &MainWindow::crearRuta);
+    connect(btnModificar, &QPushButton::clicked, this, [this]() {
+        modoActual = ModificarRuta;
+        nodoOrigenMod = nullptr;
+        nodoDestinoActual = nullptr;
+        nodoNuevoDestino = nullptr;
+        qDebug() << "Modo: Modificar Ruta activado.";
+    });
 
     QHBoxLayout *botonLayout = new QHBoxLayout;
     botonLayout->addWidget(btnCrear);
@@ -197,10 +204,21 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
         QPointF scenePos = graphicsView->mapToScene(mouseEvent->pos());
 
         QGraphicsItem *item = scene->itemAt(scenePos, QTransform());
-        if (item) {
-            QGraphicsItemGroup* grupo = dynamic_cast<QGraphicsItemGroup*>(item->group());
-            if (!grupo) return false;
+        if (!item) return false;
 
+        // Buscar el grupo al que pertenece el item (el nodo)
+        QGraphicsItemGroup* grupo = nullptr;
+
+        if (item->type() == QGraphicsItemGroup::Type) {
+            grupo = static_cast<QGraphicsItemGroup*>(item);
+        } else if (item->parentItem() && item->parentItem()->type() == QGraphicsItemGroup::Type) {
+            grupo = static_cast<QGraphicsItemGroup*>(item->parentItem());
+        }
+
+        if (!grupo || !nodoPorItem.contains(grupo)) return false;
+
+        // MODO: CREAR RUTA
+        if (modoActual == CrearRuta) {
             if (!primerNodoSeleccionado) {
                 primerNodoSeleccionado = grupo;
                 grupo->setOpacity(0.5);
@@ -209,9 +227,83 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
                 segundoNodoSeleccionado = grupo;
                 grupo->setOpacity(0.5);
                 qDebug() << "Segundo nodo seleccionado.";
+                crearRuta();  // llama a la función cuando hay dos nodos
             }
+            return true;
         }
-        return true;
+
+        // MODO: MODIFICAR RUTA
+        if (modoActual == ModificarRuta) {
+            if (!nodoOrigenMod) {
+                nodoOrigenMod = grupo;
+                grupo->setOpacity(0.5);
+                qDebug() << "Nodo origen seleccionado.";
+            } else if (!nodoDestinoActual && grupo != nodoOrigenMod) {
+                nodoDestinoActual = grupo;
+                grupo->setOpacity(0.5);
+                qDebug() << "Nodo destino actual seleccionado.";
+            } else if (!nodoNuevoDestino && grupo != nodoOrigenMod && grupo != nodoDestinoActual) {
+                nodoNuevoDestino = grupo;
+                grupo->setOpacity(0.5);
+                qDebug() << "Nuevo destino seleccionado.";
+                modificarRuta();  // ejecuta el cambio
+            }
+            return true;
+        }
     }
     return QMainWindow::eventFilter(obj, event);
+}
+
+void MainWindow::modificarRuta() {
+    int origenId = nodoPorItem[nodoOrigenMod];
+    int destinoActualId = nodoPorItem[nodoDestinoActual];
+    int nuevoDestinoId = nodoPorItem[nodoNuevoDestino];
+
+    // Verificar si la ruta actual existe
+    QSqlQuery checkQuery;
+    checkQuery.prepare(R"(
+        SELECT id FROM rutas
+        WHERE (origen_id = :o AND destino_id = :d)
+           OR (origen_id = :d AND destino_id = :o)
+    )");
+    checkQuery.bindValue(":o", origenId);
+    checkQuery.bindValue(":d", destinoActualId);
+
+    if (!checkQuery.exec() || !checkQuery.next()) {
+        qDebug() << "La ruta original no existe.";
+        resetSeleccionModificacion();
+        return;
+    }
+
+    int rutaId = checkQuery.value(0).toInt();
+
+    // Actualizar la ruta
+    QSqlQuery updateQuery;
+    updateQuery.prepare("UPDATE rutas SET destino_id = :nuevo WHERE id = :id");
+    updateQuery.bindValue(":nuevo", nuevoDestinoId);
+    updateQuery.bindValue(":id", rutaId);
+
+    if (!updateQuery.exec()) {
+        qDebug() << "Error al modificar ruta:" << updateQuery.lastError().text();
+    } else {
+        qDebug() << "Ruta modificada en BD.";
+    }
+
+    // Redibujar (borramos todas y recargamos desde BD)
+    scene->clear();
+    cargarNodosDesdeBD();
+    cargarRutasDesdeBD(); // asegúrate de tener esta función
+
+    resetSeleccionModificacion();
+}
+
+void MainWindow::resetSeleccionModificacion() {
+    if (nodoOrigenMod) nodoOrigenMod->setOpacity(1.0);
+    if (nodoDestinoActual) nodoDestinoActual->setOpacity(1.0);
+    if (nodoNuevoDestino) nodoNuevoDestino->setOpacity(1.0);
+
+    nodoOrigenMod = nullptr;
+    nodoDestinoActual = nullptr;
+    nodoNuevoDestino = nullptr;
+    modoActual = Ninguno;
 }
