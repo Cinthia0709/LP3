@@ -52,6 +52,12 @@ void MainWindow::configurarUI() {
         nodoEliminar2 = nullptr;
         qDebug() << "Modo: Eliminar Ruta activado.";
     });
+    connect(btnCrear, &QPushButton::clicked, this, [this]() {
+        modoActual = CrearRuta;
+        primerNodoSeleccionado = nullptr;
+        segundoNodoSeleccionado = nullptr;
+        qDebug() << "Modo: Crear Ruta activado.";
+    });
 
     QHBoxLayout *botonLayout = new QHBoxLayout;
     botonLayout->addWidget(btnCrear);
@@ -201,6 +207,7 @@ void MainWindow::crearRuta() {
     segundoNodoSeleccionado->setOpacity(1.0);
     primerNodoSeleccionado = nullptr;
     segundoNodoSeleccionado = nullptr;
+    modoActual = Ninguno;
 }
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
@@ -220,31 +227,31 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
 
         if (!grupo || !nodoPorItem.contains(grupo)) return false;
 
-        // ================== CREAR RUTA ==================
+        // ====================== MODO CREAR RUTA ======================
         if (modoActual == CrearRuta) {
             if (!primerNodoSeleccionado) {
                 primerNodoSeleccionado = grupo;
                 grupo->setOpacity(0.5);
-                qDebug() << "Primer nodo seleccionado.";
+                qDebug() << "Primer nodo seleccionado para crear.";
             } else if (!segundoNodoSeleccionado && grupo != primerNodoSeleccionado) {
                 segundoNodoSeleccionado = grupo;
                 grupo->setOpacity(0.5);
-                qDebug() << "Segundo nodo seleccionado.";
+                qDebug() << "Segundo nodo seleccionado para crear.";
                 crearRuta();
             }
             return true;
         }
 
-        // ================== MODIFICAR RUTA ==================
+        // ====================== MODO MODIFICAR RUTA ======================
         if (modoActual == ModificarRuta) {
             if (!nodoOrigenMod) {
                 nodoOrigenMod = grupo;
                 grupo->setOpacity(0.5);
-                qDebug() << "Nodo origen seleccionado.";
+                qDebug() << "Nodo origen seleccionado para modificar.";
             } else if (!nodoDestinoActual && grupo != nodoOrigenMod) {
                 nodoDestinoActual = grupo;
                 grupo->setOpacity(0.5);
-                qDebug() << "Nodo destino actual seleccionado.";
+                qDebug() << "Nodo destino actual seleccionado para modificar.";
             } else if (!nodoNuevoDestino && grupo != nodoOrigenMod && grupo != nodoDestinoActual) {
                 nodoNuevoDestino = grupo;
                 grupo->setOpacity(0.5);
@@ -254,24 +261,26 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
             return true;
         }
 
-        // ================== ELIMINAR RUTA ==================
+        // ====================== MODO ELIMINAR RUTA ======================
         if (modoActual == EliminarRuta) {
             if (!nodoEliminar1) {
                 nodoEliminar1 = grupo;
                 grupo->setOpacity(0.5);
-                qDebug() << "Primer nodo para eliminar.";
+                qDebug() << "Primer nodo seleccionado para eliminar.";
             } else if (!nodoEliminar2 && grupo != nodoEliminar1) {
                 nodoEliminar2 = grupo;
                 grupo->setOpacity(0.5);
-                qDebug() << "Segundo nodo para eliminar.";
+                qDebug() << "Segundo nodo seleccionado para eliminar.";
                 eliminarRuta();
             }
             return true;
         }
+
     }
 
     return QMainWindow::eventFilter(obj, event);
 }
+
 
 
 void MainWindow::modificarRuta() {
@@ -349,14 +358,13 @@ void MainWindow::eliminarRuta() {
         qDebug() << "Ruta eliminada correctamente.";
     }
 
-    // Limpiar selección y recargar escena
+
     nodoEliminar1->setOpacity(1.0);
     nodoEliminar2->setOpacity(1.0);
     nodoEliminar1 = nullptr;
     nodoEliminar2 = nullptr;
     modoActual = Ninguno;
 
-    // Redibujar
     scene->clear();
     cargarNodosDesdeBD();
     cargarRutasDesdeBD();
