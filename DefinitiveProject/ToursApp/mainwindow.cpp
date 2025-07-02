@@ -9,6 +9,7 @@
 #include <QDebug>
 #include <qcoreevent.h>
 #include <QMouseEvent>
+#include <QInputDialog>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent) {
@@ -25,11 +26,17 @@ MainWindow::~MainWindow() {
 void MainWindow::configurarUI() {
     centralWidget = new QWidget(this);
     setCentralWidget(centralWidget);
-    setWindowTitle("RUTAS");
+    setWindowTitle("RUTAS Y NODOS");
 
-    btnCrear = new QPushButton("CREAR");
-    btnModificar = new QPushButton("MODIFICAR");
-    btnEliminar = new QPushButton("ELIMINAR");
+    // Botones para rutas
+    btnCrear = new QPushButton("CREAR RUTA");
+    btnModificar = new QPushButton("MODIFICAR RUTA");
+    btnEliminar = new QPushButton("ELIMINAR RUTA");
+
+    // Nuevos botones para nodos
+    btnCrearNodo = new QPushButton("CREAR NODO");
+    btnModificarNodo = new QPushButton("MODIFICAR NODO");
+    btnEliminarNodo = new QPushButton("ELIMINAR NODO");
 
     graphicsView = new QGraphicsView(this);
     graphicsView->setFixedSize(800, 600);
@@ -38,7 +45,14 @@ void MainWindow::configurarUI() {
     graphicsView->setScene(scene);
     graphicsView->setMouseTracking(true);
     graphicsView->viewport()->installEventFilter(this);
-    connect(btnCrear, &QPushButton::clicked, this, &MainWindow::crearRuta);
+
+    // Conexiones para botones de rutas
+    connect(btnCrear, &QPushButton::clicked, this, [this]() {
+        modoActual = CrearRuta;
+        primerNodoSeleccionado = nullptr;
+        segundoNodoSeleccionado = nullptr;
+        qDebug() << "Modo: Crear Ruta activado.";
+    });
     connect(btnModificar, &QPushButton::clicked, this, [this]() {
         modoActual = ModificarRuta;
         nodoOrigenMod = nullptr;
@@ -52,28 +66,64 @@ void MainWindow::configurarUI() {
         nodoEliminar2 = nullptr;
         qDebug() << "Modo: Eliminar Ruta activado.";
     });
-    connect(btnCrear, &QPushButton::clicked, this, [this]() {
-        modoActual = CrearRuta;
-        primerNodoSeleccionado = nullptr;
-        segundoNodoSeleccionado = nullptr;
-        qDebug() << "Modo: Crear Ruta activado.";
+
+    // Conexiones para botones de nodos
+    connect(btnCrearNodo, &QPushButton::clicked, this, [this]() {
+        modoActual = CrearNodo;
+        qDebug() << "Modo: Crear Nodo activado.";
+        bool ok;
+        QString nombre = QInputDialog::getText(this, "Crear Nodo", "Nombre del nodo:", QLineEdit::Normal, "", &ok);
+        if (ok && !nombre.isEmpty()) {
+            QSqlQuery query;
+            query.prepare("INSERT INTO nodos (nombre, x, y) VALUES (:nombre, 0, 0)");
+            query.bindValue(":nombre", nombre);
+            if (query.exec()) {
+                int id = query.lastInsertId().toInt();
+                qDebug() << "Nodo creado con ID:" << id;
+                cargarNodosDesdeBD();
+            } else {
+                qDebug() << "Error al crear nodo:" << query.lastError().text();
+            }
+        }
     });
 
-    QHBoxLayout *botonLayout = new QHBoxLayout;
-    botonLayout->addWidget(btnCrear);
-    botonLayout->addWidget(btnModificar);
-    botonLayout->addWidget(btnEliminar);
+    connect(btnModificarNodo, &QPushButton::clicked, this, [this]() {
+        modoActual = ModificarNodo;
+        qDebug() << "Modo: Modificar Nodo activado.";
+        // Aquí iría la lógica para modificar un nodo
+    });
 
+    connect(btnEliminarNodo, &QPushButton::clicked, this, [this]() {
+        modoActual = EliminarNodo;
+        qDebug() << "Modo: Eliminar Nodo activado.";
+        // Aquí iría la lógica para eliminar un nodo
+    });
+
+    // Layout para botones de rutas
+    QHBoxLayout *botonRutasLayout = new QHBoxLayout;
+    botonRutasLayout->addWidget(btnCrear);
+    botonRutasLayout->addWidget(btnModificar);
+    botonRutasLayout->addWidget(btnEliminar);
+
+    // Layout para botones de nodos
+    QHBoxLayout *botonNodosLayout = new QHBoxLayout;
+    botonNodosLayout->addWidget(btnCrearNodo);
+    botonNodosLayout->addWidget(btnModificarNodo);
+    botonNodosLayout->addWidget(btnEliminarNodo);
+
+    // Layout principal
     QVBoxLayout *mainLayout = new QVBoxLayout;
-    mainLayout->addLayout(botonLayout);
+    mainLayout->addLayout(botonRutasLayout);
+    mainLayout->addLayout(botonNodosLayout);  // Agregamos el layout de nodos
     mainLayout->addWidget(graphicsView);
 
     centralWidget->setLayout(mainLayout);
 }
 
+
 void MainWindow::conectarBaseDeDatos() {
     db = QSqlDatabase::addDatabase("QSQLITE");
-    db.setDatabaseName("C:\\Users\\eicek\\Documents\\ToursApp\\Toursapp.sqlite");
+    db.setDatabaseName("C:\\LP3\\LP3\\DefinitiveProject\\ToursApp\\Toursapp.sqlite");
 
     if (!db.open()) {
         qDebug() << "Error al abrir la base de datos:" << db.lastError().text();

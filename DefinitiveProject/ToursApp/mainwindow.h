@@ -21,6 +21,9 @@ private:
     QPushButton *btnCrear;
     QPushButton *btnModificar;
     QPushButton *btnEliminar;
+    QPushButton *btnCrearNodo;    // Nuevo botón
+    QPushButton *btnModificarNodo; // Nuevo botón
+    QPushButton *btnEliminarNodo;  // Nuevo boton
     QGraphicsView *graphicsView;
     QGraphicsScene *scene;
     QSqlDatabase db;
@@ -44,7 +47,7 @@ private:
     void modificarRuta();
     void resetSeleccionModificacion();
     bool eventFilter(QObject *obj, QEvent *event) override;
-    enum ModoSeleccion { Ninguno, CrearRuta, ModificarRuta, EliminarRuta };
+    enum ModoSeleccion { Ninguno, CrearRuta, ModificarRuta, EliminarRuta, CrearNodo, ModificarNodo, EliminarNodo };
     ModoSeleccion modoActual = Ninguno;
 
 };

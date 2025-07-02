@@ -1,29 +1,20 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.5)
 
 project(ToursApp LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
 
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Sql)
+find_package(Qt5 REQUIRED COMPONENTS Widgets)
 
 
-set(PROJECT_SOURCES
+add_executable(ToursApp
     main.cpp
     mainwindow.cpp
     mainwindow.h
 )
 
-qt_add_executable(ToursApp
-    MANUAL_FINALIZATION
-    ${PROJECT_SOURCES}
-)
-
-
-target_link_libraries(ToursApp
-    PRIVATE Qt6::Widgets Qt6::Sql
-)
-
-
-qt_finalize_executable(ToursApp)
+target_link_libraries(ToursApp PRIVATE Qt5::Widgets)
